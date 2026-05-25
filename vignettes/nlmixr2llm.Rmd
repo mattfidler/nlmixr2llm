@@ -3,7 +3,7 @@ title: "Using nlmixr2llm with different LLM clients and IDEs"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Using nlmixr2llm with different LLM clients and IDEs}
-  %\VignetteEngine{knitr::knitr}
+  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
