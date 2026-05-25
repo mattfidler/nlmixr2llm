@@ -93,6 +93,8 @@ The installers write independent copies, so re-run them after upgrading the pack
 
 To check whether your installed content is current without reinstalling, run `nlmixr2llm_status()` — it inspects every install target (Claude Code user/project, Codex / `AGENTS.md`, and both Positron styles), reports any files that are out of date, and prints the refresh command for each. The `nlmixr2verse` agent also runs this check itself once per session and tells you when a refresh is available.
 
+When you load the package interactively (`library(nlmixr2llm)`), it runs this check automatically (read-only) and prints a one-line notice if any installed copy is out of date — staying silent otherwise. Disable it with `options(nlmixr2llm.startup_check = FALSE)`.
+
 ## Use as a Claude Code plugin (no R required)
 
 The bundled plugin manifest lives in `.claude-plugin/` at the repo root (pointing at the same `inst/agents/` and `inst/skills/` content the R package uses) so the repo doubles as a plugin source:

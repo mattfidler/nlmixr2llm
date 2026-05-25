@@ -118,6 +118,25 @@ test_that("nlmixr2llm.consent option pre-approves the home write", {
   expect_true(confirm_home_write(file.path(tmp, ".claude")))
 })
 
+test_that("startup_drift_message reports outdated targets, silent otherwise", {
+  cur <- data.frame(
+    target = c("Claude Code (user)", "Codex (user)"),
+    status = c("current", "not installed"),
+    stringsAsFactors = FALSE
+  )
+  expect_null(startup_drift_message(cur))
+
+  mixed <- data.frame(
+    target = c("Claude Code (user)", "Codex / AGENTS.md (project)"),
+    status = c("outdated", "current"),
+    stringsAsFactors = FALSE
+  )
+  msg <- startup_drift_message(mixed)
+  expect_type(msg, "character")
+  expect_match(msg, "out of date")
+  expect_match(msg, "Claude Code")
+})
+
 test_that("get_agent and get_skill return non-empty markdown", {
   txt <- get_agent()
   expect_type(txt, "character")

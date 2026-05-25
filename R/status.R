@@ -21,6 +21,11 @@
 #' or `"not installed"`. Only targets that actually have installed content are
 #' mentioned in the printed summary.
 #'
+#' When the package is attached interactively, it runs this check automatically
+#' (read-only) and prints a one-line notice if any installed copy is out of
+#' date. Disable that startup check with `options(nlmixr2llm.startup_check =
+#' FALSE)`.
+#'
 #' @param path Project root used for project-scoped targets. Defaults to the
 #'   current working directory. User-scoped targets (`~/.claude`, `~/.codex`)
 #'   are always checked at their fixed locations.
@@ -147,6 +152,22 @@ version_status <- function(file) {
   } else {
     "outdated"
   }
+}
+
+# Compose a brief startup note when any installed target is out of date, or
+# NULL when everything is current / nothing is installed. Factored out of
+# .onAttach() (see zzz.R) so it can be tested without an interactive session.
+startup_drift_message <- function(status) {
+  outdated <- status[status$status == "outdated", , drop = FALSE]
+  if (!nrow(outdated)) {
+    return(NULL)
+  }
+  targets <- unique(outdated$target)
+  paste0(
+    "nlmixr2llm: installed content is out of date in ", length(targets),
+    " location(s) (", paste(targets, collapse = ", "), ").\n",
+    "Run nlmixr2llm_status() to see details and the command to refresh each."
+  )
 }
 
 report_status <- function(rows) {
