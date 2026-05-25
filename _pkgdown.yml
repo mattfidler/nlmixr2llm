@@ -1,0 +1,58 @@
+url: https://john-harrold.github.io/nlmixr2llm/
+
+template:
+  bootstrap: 5
+  bootswatch: cosmo
+  bslib:
+    primary: "#1f4e79"
+    base_font: {google: "Inter"}
+    heading_font: {google: "Inter"}
+    code_font: {google: "JetBrains Mono"}
+
+home:
+  title: nlmixr2llm
+  description: >
+    LLM instructions for the nlmixr2 pharmacometric modeling ecosystem,
+    distributed as an R package and as a Claude Code plugin.
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [search, github]
+  components:
+    intro:
+      text: Get started
+      href: articles/nlmixr2llm.html
+
+reference:
+  - title: Discovery
+    desc: >
+      Inspect the agents and skills bundled with the package.
+    contents:
+      - list_packages
+      - list_agents
+      - list_skills
+      - get_agent
+      - get_skill
+
+  - title: System prompt
+    desc: >
+      Assemble the bundled content as a system prompt for any LLM client.
+    contents:
+      - system_prompt
+
+  - title: Install into coding environments
+    desc: >
+      Write the bundled content into the locations specific tools read from,
+      and check whether installed copies are current.
+    contents:
+      - install_claude_code
+      - install_codex
+      - install_positron
+      - install_agents_md
+      - nlmixr2llm_status
+
+articles:
+  - title: Usage
+    contents:
+      - nlmixr2llm

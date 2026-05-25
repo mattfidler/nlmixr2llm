@@ -1,0 +1,23 @@
+{
+  "name": "nlmixr2llm",
+  "owner": {
+    "name": "john-harrold"
+  },
+  "description": "Claude Code skills and agents for the nlmixr2 pharmacometric modeling ecosystem in R.",
+  "plugins": [
+    {
+      "name": "nlmixr2llm",
+      "source": ".",
+      "description": "Bundled skills and agents for rxode2, nlmixr2, nonmem2rx, monolix2rx, and babelmixr2.",
+      "version": "0.1.0",
+      "category": "data-science",
+      "keywords": [
+        "pharmacometrics",
+        "popPK",
+        "nlmixr2",
+        "rxode2",
+        "R"
+      ]
+    }
+  ]
+}

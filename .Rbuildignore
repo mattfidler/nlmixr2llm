@@ -1,0 +1,16 @@
+^\.claude$
+^\.claude-plugin$
+^CLAUDE\.md$
+^\.Rproj\.user$
+^.*\.Rproj$
+^\.github$
+^\.git$
+^\.gitignore$
+\.DS_Store$
+^LICENSE\.md$
+^cran-comments\.md$
+^nlmixr2llm\.Rcheck$
+^nlmixr2llm_.*\.tar\.gz$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$

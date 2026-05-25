@@ -1,0 +1,19 @@
+# Claude Code local project config (not the .claude-plugin/ manifest, which is tracked)
+.claude/
+
+# macOS
+.DS_Store
+
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# R CMD build / check artifacts
+*.tar.gz
+/*.Rcheck/
+
+# pkgdown output
+/docs/
