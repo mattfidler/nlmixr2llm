@@ -45,7 +45,7 @@ author/simulate          fit                         run on other engines
 - **nlmixr2** exposes that model to estimation backends and returns a tidy fit object.
 - **babelmixr2** is the *forward* path (nlmixr2 → engine). It runs the engine, then reads the engine's *output files* with the low-level readers from `nonmem2rx`/`monolix2rx` (`nminfo()`, `nmext()`, `nmtab()`, `nmcov()`, `nmxml()`, Monolix equivalents). It does **not** run the full model back-translation — it already knows the original model.
 - **nonmem2rx** / **monolix2rx** are the *back-translation* path: finished engine run → rxode2 object you can solve, simulate, and qualify. `babelmixr2::as.nlmixr2()` promotes one to a real nlmixr2 fit.
-- So a broken babelmixr2 fit is usually a result-reading or convergence problem, not a translation problem. Loading the engine output independently with `nonmem2rx()`/`monolix2rx()` is still the best diagnostic — a *separate* path to the same run, so agreement blames babelmixr2's reader and disagreement blames the engine output.
+- So a broken babelmixr2 fit is usually a result-reading or convergence problem, not a translation problem. Loading the engine output independently with `nonmem2rx()`/`monolix2rx()` is still the best diagnostic — a *separate* path to the same run. If that path qualifies cleanly, the fault is babelmixr2's reader; if it also fails to qualify, the model uses a construct the rxode2 translation can't reproduce. Neither outcome says the engine run itself is bad — read its listing/summary for that.
 
 # Conventions shared across the ecosystem
 
@@ -112,7 +112,7 @@ One model, many engines: `nlmixr(model, data, est = "nonmem", nonmemControl(mode
 
 Both follow **convert → qualify → use**, and the qualification step is not optional.
 
-- `nonmem2rx(fileOrCtl, validate = TRUE)` — `validate=TRUE` runs rxode2-vs-NONMEM qualification *and* populates `$etaData`; without it ETA resampling fails confusingly.
+- `nonmem2rx(fileOrCtl, validate = TRUE)` — `validate=TRUE` runs rxode2-vs-NONMEM qualification *and* populates `$etaData`; without it ETA resampling fails confusingly. Read slots with `$`, not `[[ ]]`: computed ones (`$ini`, `$thetaMat`, `$props`) return `NULL` under `[[ ]]`.
 - `monolix2rx(mlxtranFile)` needs the `.mlxtran` **and** its results folder; with only the `.mlxtran` you get a structural model with empty `$theta`/`$omega`. Monolix `lib:` models need `options(monolix2rx.library=)` or `lixoftConnectors`.
 - Both return an **rxode2 object, not an nlmixr2 fit**. `babelmixr2::as.nlmixr2(mod)` promotes it to a real fit.
 - Compare rxode2 PRED/IPRED against the engine's own (`$ipredCompare`, `plot(mod)`); diffs should be ~0. A nonzero diff means an unsupported construct — never proceed silently.

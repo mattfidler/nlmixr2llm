@@ -143,4 +143,9 @@ The skill is "done" only when the fit has been **executed and inspected**, not j
 
 babelmixr2 does **not** call the backward *model* translation after a run completes, because it already knows what the original nlmixr2 model was. What it does use are those packages' low-level output readers — `nonmem2rx::nminfo()`, `nmext()`, `nmtab()`, `nmcov()`, `nmxml()` and the Monolix equivalents — to pull estimates, covariance, and tables off disk and attach them to the model it already has.
 
-So if a babelmixr2 fit looks broken, suspect result reading or engine convergence rather than model translation. Debug by loading the engine output directly with `nonmem2rx()` / `monolix2rx()` and calling `babelmixr2::as.nlmixr2()` on the result: that is an independent path to the same run, so a clean result there points at babelmixr2's reader, and a bad result there points at the engine output.
+So if a babelmixr2 fit looks broken, suspect result reading or engine convergence rather than model translation. Debug by loading the engine output directly with `nonmem2rx()` / `monolix2rx()` and calling `babelmixr2::as.nlmixr2()` on the result — an independent path to the same run:
+
+- **It converts and qualifies cleanly** → the fault is in babelmixr2's reading.
+- **It fails to qualify as well** → the model uses a construct the rxode2 translation cannot reproduce. That is a limitation of the import path, *not* evidence that the engine output is bad.
+
+Whether the engine run itself converged is a third question, answered by reading its listing / summary — not by the qualification diff.

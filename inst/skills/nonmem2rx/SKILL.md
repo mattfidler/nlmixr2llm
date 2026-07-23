@@ -44,7 +44,7 @@ The returned object **is** an rxode2 UI, so anything that works on an rxode2 mod
 2. **`validate = TRUE`.** Pass this on the conversion call to run rxode2-vs-NONMEM qualification automatically and populate the `$ipredCompare` / `$predCompare` slots. It also populates `$etaData` — without it that slot is empty and the ETA-resampling pattern below fails with a confusing `arguments imply differing number of rows: 1, 0`. Make this the default in any script you write.
 3. **`save=`.** Defaults to `FALSE`. Set `save = TRUE` to cache the parsed object as an `.rds` next to the source — useful for big runs you'll re-load.
 4. **Returned object is rxode2 UI, not a fit.** Treat it like a model. To see the generated rxode2 model body: `cat(deparse(as.function(mod)), sep="\n")`. To get nlmixr2-style post-processing (residuals, VPCs against the original data) convert it via the conversion vignette workflow rather than calling `nlmixr2()` again from scratch.
-5. **Useful slots on the result** (access with `$`, which dispatches on the rxode2 UI — `[[ ]]` does *not*):
+5. **Useful slots on the result — always access with `$`.** Some slots are plain list elements (`$etaData`, `$nonmemData`, `$predCompare`) and `[[ ]]` reaches them too, but others are *computed* by the rxode2 UI's `$` dispatch (`$ini`, `$thetaMat`, `$props`) and `[[ ]]` returns `NULL` for those — silently, so it looks like the conversion lost data. Use `$` uniformly and the distinction never bites.
    - `$nonmemData` — NONMEM table merged with the dataset
    - `$etaData` — per-ID empirical Bayes ETAs (great for resampling-based sims)
    - `$ini` — parameter table (THETA + variability), tidy data.frame form
@@ -129,6 +129,11 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 When you fit with `est = "nonmem"`, `babelmixr2` runs NONMEM and reads its output files using `nonmem2rx`'s **low-level readers** (`nminfo()`, `nmext()`, `nmtab()`, `nmcov()`, `nmxml()`). It does **not** call the full `nonmem2rx()` model back-translation — it already has the original nlmixr2 model, so there is no model to reconstruct.
 
-That means a broken babelmixr2 NONMEM fit is usually a result-reading or engine-convergence problem rather than a model-translation problem. Loading the same `.ctl` directly with `nonmem2rx()` is still the right diagnostic, because it is an independent path to the same run: if that conversion qualifies cleanly against `$ipredCompare`, the fault is in babelmixr2's reading; if it doesn't, the NONMEM output itself is the problem.
+That means a broken babelmixr2 NONMEM fit is usually a result-reading or engine-convergence problem rather than a model-translation problem. Loading the same `.ctl` directly with `nonmem2rx()` is still the right diagnostic, because it is an independent path to the same run:
+
+- **The independent conversion qualifies cleanly** (`$ipredCompare` ~0) — nonmem2rx can represent this model and read its outputs, so the fault is in babelmixr2's reading.
+- **The independent conversion also fails to qualify** — that is a *translation* limitation, not a verdict on the NONMEM run. It means the model uses a construct the rxode2 translation cannot reproduce (see the pain points above); inspect the generated model body.
+
+Neither outcome tells you whether the NONMEM run itself is sound. Answer that separately by reading the listing for convergence and rounding-error messages — the qualification diff does not speak to it.
 
 Going the other way, `babelmixr2::as.nlmixr2()` promotes a `nonmem2rx()` object into a full nlmixr2 fit.

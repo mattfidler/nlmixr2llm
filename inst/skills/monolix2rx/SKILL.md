@@ -95,4 +95,9 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 `babelmixr2::as.nlmixr2()` is the function that converts an rxode2 model produced by `monolix2rx()` into an `nlmixr2` fit.
 
-If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` directly with `monolix2rx()`. That is a genuinely *different* code path into the same run, so it both works around the failure and localizes it: if the independent conversion looks right, the problem is in babelmixr2's result reading; if it looks wrong too, the problem is in the Monolix output itself.
+If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` directly with `monolix2rx()`. That is a genuinely *different* code path into the same run, so it both works around the failure and localizes it:
+
+- **The independent conversion qualifies** — monolix2rx can represent the model and read the results, so the problem is in babelmixr2's result reading.
+- **It fails to qualify too** — that is a *translation* limitation (custom distributions, complex transforms, non-standard IOV, BLQ handling), not evidence that Monolix produced bad output. Inspect the generated rxode2 model body.
+
+Whether the Monolix run itself is sound is a separate question, answered by `summary.txt` and the convergence output rather than by the qualification diff.

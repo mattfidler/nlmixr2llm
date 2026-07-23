@@ -31,6 +31,20 @@ allowlist can only load skills if `Skill` is listed.
   agent alone consumed the entire budget. The one exception is
   `c("rxode2", "nlmixr2")` — the two largest skills — which lands just over;
   `include = "skills"` fits three. README carries the full size table.
+* Corrected the babelmixr2 debugging advice in all four places that carried it
+  (agent plus the babelmixr2, nonmem2rx and monolix2rx skills). It said that if
+  an independent `nonmem2rx()` / `monolix2rx()` conversion also fails to
+  qualify, the engine output is to blame. That does not follow, and it
+  contradicted the same skills' own qualification guidance: a failed
+  independent conversion means the model uses a construct the rxode2
+  translation cannot reproduce, which is an import limitation and says nothing
+  about whether the engine run converged. Whether the run itself is sound is a
+  separate question answered by reading its listing/summary.
+* Corrected the `$` vs `[[ ]]` note on `nonmem2rx()` objects. The blanket claim
+  that `[[ ]]` does not dispatch was wrong: stored slots (`$etaData`,
+  `$nonmemData`, `$predCompare`) are reachable both ways. Only *computed* slots
+  (`$ini`, `$thetaMat`, `$props`) return `NULL` under `[[ ]]` — silently, which
+  looks like the conversion lost data. The guidance is now the precise version.
 * Documented a multi-endpoint simulation trap found while testing the split:
   observation records must name their endpoint in `cmt`, so a plain sampling
   grid fails with `'dvid'->'cmt' or 'cmt' on observation record or on a
