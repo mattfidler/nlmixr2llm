@@ -67,7 +67,9 @@ install_codex(scope = "project", packages = c("rxode2", "nlmixr2"))
 install_codex(scope = "user", mode = "append")
 ```
 
-Codex enforces a default 32 KiB cap on combined `AGENTS.md` content. The full corpus (~62 KiB) exceeds that. The combined `nlmixr2verse` agent is ~29 KiB on its own and is included whole whenever agents are requested, so `packages = ...` only subsets the skills. For Codex, install `include = "agents"` (just the agent, ~29 KiB) or `include = "skills"` with a `packages = ...` subset.
+Codex enforces a default 32 KiB cap on combined `AGENTS.md` content. The full corpus (~71 KiB) exceeds that. The combined `nlmixr2verse` agent is included whole whenever agents are requested, so `packages = ...` only subsets the skills. For Codex, install `include = "agents"` (just the agent, ~31.9 KiB — under the cap, but only barely) or `include = "skills"` (~40 KiB) with a `packages = ...` subset to stay under it.
+
+The agent sits close enough to the cap that adding much more to `inst/agents/nlmixr2verse.md` will push `include = "agents"` over. The package's own test suite warns when that happens; if you see that warning, either trim the agent or raise `project_doc_max_bytes` in `~/.codex/config.toml`.
 
 ### Install into Positron Assistant
 

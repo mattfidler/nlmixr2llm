@@ -32,8 +32,9 @@ author/simulate          fit                         run on other engines
 
 - **rxode2** is the model language + solver. Anything inside an nlmixr2 `model({})` block is rxode2.
 - **nlmixr2** exposes that model to estimation backends and returns a tidy fit object.
-- **babelmixr2** is the *forward* path (nlmixr2 → NONMEM/Monolix/PKNCA). It runs the engine and reads results back using `nonmem2rx`/`monolix2rx` under the hood.
-- **nonmem2rx** / **monolix2rx** are the *back-translation* path: finished engine run → rxode2 object you can solve, simulate, and qualify. When a babelmixr2 engine fit looks wrong, the bug is almost always in back-translation — reproduce it by loading the engine output directly with `nonmem2rx()` / `monolix2rx()` and debug there.
+- **babelmixr2** is the *forward* path (nlmixr2 → engine). It runs the engine, then reads the engine's *output files* with the low-level readers from `nonmem2rx`/`monolix2rx` (`nminfo()`, `nmext()`, `nmtab()`, `nmcov()`, `nmxml()`, Monolix equivalents). It does **not** run the full `nonmem2rx()`/`monolix2rx()` model back-translation — it already knows the original model.
+- **nonmem2rx** / **monolix2rx** are the *back-translation* path: finished engine run → rxode2 object you can solve, simulate, and qualify. `babelmixr2::as.nlmixr2()` promotes one to a real nlmixr2 fit.
+- So a broken babelmixr2 fit is usually a result-reading or convergence problem, not a translation problem. Loading the engine output independently with `nonmem2rx()`/`monolix2rx()` is still the best diagnostic — a *separate* path to the same run, so agreement blames babelmixr2's reader and disagreement blames the engine output.
 
 ## Routing a task to the right section
 
@@ -52,9 +53,10 @@ These hold everywhere; the package sections below add specifics rather than repe
 - A model is an R function with `ini({})` (parameters) and `model({})` (equations) blocks.
 - ODEs use `d/dt(name) <- ...`; initial conditions are `name(0) <- value` inside `model({})`.
 - Algebraic assignments (e.g. `cp <- center/v`) must appear *before* they are used and before any residual-error line.
-- Parameterize fixed effects on the **log or logit scale**: `tcl <- log(value)` in `ini`, `cl <- exp(tcl + eta.cl)` in `model`; use `logit()`/`expit()` for (0,1)-bounded and `logit(,low, hi)`/`expit(,low,hi)` for (low, hi)-bounded parameters.
-- Between-subject variability uses `~` with a starting variance: `eta.cl ~ 0.3`. Off-diagonal OMEGA blocks list multiple etas together with a matrix start.
-- Residual error lives at the end of `model({})`: `cp ~ add(add.sd)`, `prop(prop.sd)`, `add() + prop()`, or `lnorm()`. Multi-endpoint models use one residual line per endpoint, bound to the data via `| dvid("name")`.
+- Parameterize fixed effects on the **log or logit scale**: `tcl <- log(value)` in `ini`, `cl <- exp(tcl + eta.cl)` in `model`; use `logit()`/`expit()` for (0,1)-bounded and `logit(est, low, hi)`/`expit(est, low, hi)` for (low, hi)-bounded parameters.
+- Between-subject variability uses `~` with a starting variance: `eta.cl ~ 0.3`. Off-diagonal OMEGA blocks join etas with `+` and take a lower-triangular start: `eta.cl + eta.v ~ c(0.3, 0.01, 0.1)`.
+- Residual error lives at the end of `model({})`: `add()`, `prop()`, `add() + prop()`, `lnorm()`, `add() + boxCox()`, `add() + dt()`, or `ll(cp) ~ likelihood`.
+- Multi-endpoint models use one residual line per endpoint, bound to the data with a **bare endpoint name** after `|`: `cp ~ add(add.sd) | cp`. Never `| dvid("cp")` — that is a parse error, not a deprecation.
 - Datasets are NONMEM-style: `ID/TIME/EVID/AMT/CMT/DV` (+ covariates, `DVID`, `CENS`/`LIMIT`).
 
 **How to work a task.**
@@ -72,32 +74,23 @@ rxode2::rxSetSeed(5446)
 
 # Staying current (self-check)
 
-Your own content (this agent file and the per-package skills) is distributed by
-the `nlmixr2llm` R package, which installs **independent copies** into each
-coding-agent tool (Claude Code, Codex / `AGENTS.md`, Positron). When that
-package is upgraded, those copies do **not** update automatically — so the
-guidance you are running may lag what the package now ships.
+This content ships via the `nlmixr2llm` R package, which installs **independent
+copies** per tool (Claude Code, Codex/`AGENTS.md`, Positron). Upgrading the
+package does *not* refresh them, so your guidance may lag what it now ships.
 
-Once per session — the first time you take on an nlmixr2 task, not on every
-turn — check for drift, but only if the `nlmixr2llm` R package is installed:
+Once per session — on your first nlmixr2 task, not every turn — check for drift:
 
 ```bash
 Rscript -e 'if (requireNamespace("nlmixr2llm", quietly = TRUE)) nlmixr2llm::nlmixr2llm_status()'
 ```
 
-- It reports every install target (Claude Code, Codex/`AGENTS.md`, Positron)
-  that has content installed, and whether each is up to date.
-- If it reports files **out of date** (or not yet installed), tell the user
-  briefly and pass along the exact refresh command it prints for that target
-  (e.g. `install_claude_code(..., overwrite = TRUE)`,
-  `install_codex(..., mode = "write")`, or
-  `install_positron(..., overwrite = TRUE)`). Refreshing overwrites any local
-  edits to those files.
-- If everything is up to date, or the package/Rscript isn't available, say
-  nothing and proceed with the user's actual task.
-
-Do not block or delay the user's request on this check, and do not repeat it
-once you've run it in a session.
+If it reports files out of date (or not installed), tell the user briefly and
+pass along the exact refresh command it prints — e.g.
+`install_claude_code(..., overwrite = TRUE)`, `install_codex(..., mode =
+"write")`, `install_positron(..., overwrite = TRUE)`. Refreshing overwrites
+local edits to those files. If all is current, or the package/Rscript is
+unavailable, say nothing. Never block or delay the user's task on this check,
+and don't repeat it in a session.
 
 ---
 
@@ -216,18 +209,9 @@ sim   <- rxSolve(mod, events = evall)
 
 ## rxode2 references (in the rxode2 repo)
 
-- `vignettes/rxode2-intro.Rmd` — minimal intro
-- `vignettes/rxode2-syntax.Rmd` — model language reference
-- `vignettes/articles/rxode2-ui-object.Rmd` — function-style UI deep dive
-- `vignettes/rxode2-event-table.Rmd`, `rxode2-event-types.Rmd`, `rxode2-events-classic.Rmd` — event specification
-- `vignettes/rxode2-single-subject.Rmd` — single-subject simulation
-- `vignettes/rxode2-sim-var.Rmd` — population simulation with IIV
-- `vignettes/articles/rxode2-clinical-trial-sim.Rmd` — clinical trial simulation patterns
-- `vignettes/articles/rxode2-eta-eps-resampling.Rmd` — resampling fitted ETAs/EPSs
-- `vignettes/articles/rxode2-parameter-uncertainty.Rmd` — propagating parameter uncertainty
-- `vignettes/articles/rxode2-vpc.Rmd` — visual predictive checks
-- `vignettes/rxode2-covariates.Rmd`, `rxode2-prior-data.Rmd` — covariates / external data
-- `vignettes/articles/Modifying-Models.Rmd` — model piping / edits
+- `vignettes/`: `rxode2-intro` (intro), `rxode2-syntax` (language), `rxode2-single-subject`, `rxode2-sim-var` (population/IIV), `rxode2-covariates`, `rxode2-prior-data`
+- `vignettes/`: `rxode2-event-table`, `rxode2-event-types`, `rxode2-events-classic` — event specification
+- `vignettes/articles/`: `rxode2-ui-object` (function-style UI), `rxode2-clinical-trial-sim`, `rxode2-eta-eps-resampling`, `rxode2-parameter-uncertainty`, `rxode2-vpc`, `Modifying-Models` (piping)
 - `inst/syntax-functions.csv`, `inst/reserved-keywords.csv` — language reference
 
 ---
@@ -277,14 +261,23 @@ one.compartment <- function() {
 
 | `est=` | Use for |
 |---|---|
-| `"saem"` | Robust default for most popPK/PD; tolerant of bad initials; **does not** compute SEs by itself |
-| `"focei"` | Gradient-based with Hessian SEs; more sensitive to initials and stiffness; gold standard for SE/precision |
-| `"foce"` | FOCE without interaction |
-| `"fo"` | First-order; legacy comparison |
+| `"saem"` | Robust default; tolerant of bad initials. Computes SEs (`covMethod = "sa"` default); OFV is computed lazily by Gaussian quadrature on first access |
+| `"focei"` | Gradient-based, Hessian SEs; sensitive to initials/stiffness; supports generalized likelihood |
+| `"foce"` / `"fo"` | FOCE without interaction / first-order; legacy comparison |
+| `"laplace"` | `agq` with a single quadrature point |
+| `"agq"` | Adaptive Gaussian quadrature; tune `nAGQ`. Keep it low, few etas only |
 | `"nlme"` | Wraps R's `nlme`; OK for simple closed-form models |
-| `"posthoc"` | Empirical Bayes ETAs only — freezes THETAs/OMEGAs and computes ETAs for new data |
+| `"posthoc"` | Empirical Bayes ETAs only — freezes THETAs/OMEGAs for new data |
+| newer | `"vae"` (variational autoencoder), `"advi"`, `"npag"`/`"npb"` (nonparametric), `"impmap"`/`"imp"`/`"qrpem"` (importance-sampling EM), `"foi"` |
 
-Always pass a matched control: `saemControl()`, `foceiControl()`, `nlmeControl()`. Use `print = 0` to quiet long fits in scripts.
+Name modifiers on the FOCEI/quadrature/nonparametric families:
+
+- **`m`/`i` prefix** = mu-referenced (`mfocei`/`ifocei`, `magq`/`iagq`, `mnpag`/`inpag`, …). Both profile mu thetas out of the outer optimizer — `m*` by in-C++ OLS (`muModel="lin"`), `i*` by IRLS (`muModel="irls"`). The `i` is *not* interaction.
+- **`f` suffix** = fast (`foceif`, `focef`, `agqf`, `mfoceif`, …), forcing `foceiControl(fast=TRUE)`: analytic overall outer gradient, gradient-descent optimization, and a defaulted `outerOpt` switches `bobyqa` → `lbfgsb3c`.
+
+~76 `est=` values exist — run `methods("nlmixr2Est")` rather than guessing. `mix()` mixtures work with `focei`/`foce`/`foi`/`fo`.
+
+Always pass a matched control: `saemControl()`, `foceiControl()`, `foceControl()`, `foControl()`, `laplaceControl()`, `agqControl()`, `nlmeControl()`, `posthocControl()`. Use `print = 0` to quiet long fits in scripts.
 
 ## Fitting and inspection
 
@@ -314,9 +307,9 @@ After fitting: verify OFV is finite and no parameter is hugging a boundary; insp
 ## nlmixr2 pitfalls and diagnostics
 
 - Bad initials on the log scale (forgetting `log()` produces wildly off starting THETAs); OFV swinging wildly during SAEM is the usual symptom — sanity-check `exp(t*)` values.
-- Asking for SEs from a SAEM fit and getting NA — SAEM doesn't compute them; refit with FOCEi or run a post-processing SE step.
-- Over-parameterized OMEGA (more ETAs than the data supports) → FOCEi Hessian fails or BSV% near zero/100%. Reduce OMEGA dimension or fix small variances.
-- `vpcPlot()` empty → residual-error block missing, or `dvid` strings don't match the data's `DVID` values.
+- Assuming a SAEM fit has no SEs. It does — `covMethod = "sa"` runs by default and `$parFixed` carries SE/%RSE for the THETAs. If the residual-error SE prints as a denormal (`9.39e-323`, `6.95e-310`) that is a known bug (nlmixr2est#816), not a missing estimate: read `sqrt(diag(fit$cov))` instead, where the correct value already lives.
+- Over-parameterized OMEGA → FOCEi Hessian fails or BSV% near zero/100%. Reduce OMEGA dimension, fix small variances, or try `foceiControl(outerOpt = "bobyqa")`.
+- `vpcPlot()` empty → residual-error block missing, or endpoint names after `|` don't match the data's `DVID` values.
 - `augPred()` flat → dosing into the wrong compartment, or `CMT` integers in the data don't map to the model's `d/dt(name)`.
 - Convergence "succeeds" but a parameter sits at its boundary → it's not really estimated; rethink the model.
 - Treating SAEM convergence prints as the final answer — always inspect `$parFixed` and a diagnostic.
@@ -337,15 +330,16 @@ After fitting: verify OFV is finite and no parameter is hugging a boundary; insp
 
 # babelmixr2 — fit nlmixr2 models on NONMEM / Monolix / PKNCA
 
-babelmixr2 lets a user write **one** nlmixr2 function-style model and fit it via NONMEM, Monolix, or PKNCA. Forward translation generates the engine input; back-translation (via `nonmem2rx` / `monolix2rx`) reads results into a standard nlmixr2 fit object. It is *not* a one-shot syntax converter — it actually runs the engine and reads results back.
+babelmixr2 lets a user write **one** nlmixr2 function-style model and fit it on another engine: it generates the engine input, runs the engine, then reads the output files back onto the model it already has. It is *not* a one-shot syntax converter.
 
-Workflow: write/read one model → pick an engine (`est = "nonmem"|"monolix"|"pknca"`) → configure the engine path once per session → `nlmixr(model, data, est, control)` → inspect the fit like any nlmixr2 fit.
+Workflow: write/read one model → pick an engine → configure the engine path once per session → `nlmixr(model, data, est, control)` → inspect the fit like any nlmixr2 fit.
 
 | `est=` | Behavior |
 |---|---|
-| `"nonmem"` | Generate ctl + dataset → run NONMEM → read back via `nonmem2rx` → nlmixr2 fit |
-| `"monolix"` | Generate `.mlxtran` + dataset → run Monolix (CLI or `lixoftConnectors`) → read back via `monolix2rx` → nlmixr2 fit |
-| `"pknca"` | Run NCA via `PKNCA` and wrap the result; useful for popPK initial estimates, *not* a model fit |
+| `"nonmem"` | Generate ctl + dataset → run NONMEM → read the `.ext`/`.cov`/tables → nlmixr2 fit |
+| `"monolix"` | Generate `.mlxtran` + dataset → run Monolix (CLI or `lixoftConnectors`) → read the results folder → nlmixr2 fit |
+| `"pknca"` | Run NCA via `PKNCA`; useful for popPK initial estimates, *not* a model fit |
+| others | `"poped"` (PopED design), `"saemix"`, `"nlmer"` (lme4), `"fmeMcmc"`, `"pseudoOptim"` |
 
 ## Example — NONMEM (swap the call for Monolix)
 
@@ -397,23 +391,23 @@ fit <- nlmixr(pk.turnover.emax3, nlmixr2data::warfarin, "nonmem",
 
 ## Control objects and engine paths
 
-- **`nonmemControl()`**: `modelName` (output directory — *always set it*); `runCommand` (NONMEM executable string like `"nmfe743"`, or a cluster-submitter function; defaults to `getOption("babelmixr2.nonmem")`); `readRounding` (`FALSE` default — set `TRUE` to read partial results after a rounding-error finish); convergence args (`sigdig`, `sigl`, `tol`) mirror NONMEM `$EST`.
+- **`nonmemControl()`**: `modelName` (output directory — *always set it*); `runCommand` (NONMEM executable like `"nmfe743"`, or a `function(ctl, directory, ui)` cluster submitter; defaults to `getOption("babelmixr2.nonmem")`, `NA` writes input without running); `readRounding` (`FALSE` default — `TRUE` reads partial results after a rounding-error finish); `sigdig`/`sigl`/`tol` mirror NONMEM `$EST`.
 - **`monolixControl()`**: `modelName`; `runCommand` (Monolix CLI, or rely on `lixoftConnectors`).
 - **`pkncaControl()`**: `concu`, `doseu`, `timeu`, `volumeu` — units; must match the dataset.
 
-Set engine paths once per session, in priority order: (1) `options("babelmixr2.nonmem" = "nmfe743")` / `options("babelmixr2.monolix" = "monolix")`; (2) pass `runCommand=` to the control object for one-off overrides; (3) for Monolix, installing `lixoftConnectors` enables auto-detection.
+Set engine paths once per session, in priority order: (1) `options("babelmixr2.nonmem" = "nmfe743")` / `options("babelmixr2.monolix" = "monolix")`; (2) `runCommand=` on the control object for one-off overrides; (3) for Monolix, `lixoftConnectors` enables auto-detection.
 
-Before launching, confirm the engine exists (`getOption("babelmixr2.nonmem")` / `getOption("babelmixr2.monolix")` and the binary on `PATH`) and tell the user if it's missing rather than launching a doomed run. Always set `modelName` explicitly. Verify the fit (`print(fit)`, `$parFixed`, `$omega`, a diagnostic; OFV finite and SEs present) before reporting.
+Before launching, confirm the engine exists (`getOption(...)` and the binary on `PATH`) and tell the user if it's missing rather than launching a doomed run. Always set `modelName`. Verify the fit (`print(fit)`, `$parFixed`, `$omega`, a diagnostic; OFV finite and SEs present) before reporting.
 
 ## babelmixr2 pitfalls and diagnostics
 
 - Engine path not set (`runCommand` empty) — the run never launches or launches the wrong binary. `could not find NONMEM/Monolix` → check the option and `PATH`.
-- Forgetting `modelName` — multiple runs collide in the same output directory.
-- NONMEM run completes with rounding errors and `readRounding = FALSE` — fit looks empty. Fix convergence or set `readRounding = TRUE` to inspect partials.
-- Monolix "works" but no fit — `lixoftConnectors` isn't installed and `babelmixr2.monolix` isn't set.
-- Empty `fit$parFixed` after a "successful" run → back-translation broke; load the engine output directly with `nonmem2rx()` / `monolix2rx()` to isolate the problem.
-- Different OFV from a hand-written ctl on the same model → babelmixr2's generated code uses `MU` referencing; check `MU` refs, `$THETA` bounds, and dataset column ordering.
-- Using PKNCA's result as if it were a model fit — it's NCA, intended for initial-estimate seeding.
+- Forgetting `modelName` — multiple runs collide in one output directory.
+- NONMEM finishes with rounding errors and `readRounding = FALSE` — fit looks empty. Fix convergence or set `readRounding = TRUE` to inspect partials.
+- Monolix "works" but no fit — `lixoftConnectors` not installed and `babelmixr2.monolix` unset.
+- Empty `fit$parFixed` after a "successful" run → result reading broke; load the engine output independently with `nonmem2rx()` / `monolix2rx()` to isolate reader vs. engine output.
+- Different OFV from a hand-written ctl → babelmixr2 generates `MU`-referenced code; check `MU` refs, `$THETA` bounds, and dataset column ordering.
+- Using PKNCA's result as a model fit — it's NCA, for initial-estimate seeding.
 
 ## babelmixr2 references (in the babelmixr2 repo)
 
@@ -427,7 +421,7 @@ Before launching, confirm the engine exists (`getOption("babelmixr2.nonmem")` / 
 
 # nonmem2rx — import finished NONMEM runs into R
 
-nonmem2rx reads a NONMEM control stream (`.ctl` / `.mod`) plus its run artifacts (`.lst`/`.res`, `.xml`, `.phi`, dataset) and returns an **rxode2 UI object** with the NONMEM estimates, ETAs, and predictions baked in. The object can be solved, simulated, plotted, and optionally promoted to an nlmixr2 fit-like object.
+nonmem2rx reads a NONMEM control stream (`.ctl` / `.mod`) plus its run artifacts (`.lst`/`.res`, `.xml`, `.phi`, dataset) and returns an **rxode2 UI object** with the NONMEM estimates, ETAs, and predictions baked in. It can be solved, simulated, plotted, and promoted to a real nlmixr2 fit with `babelmixr2::as.nlmixr2(mod)`.
 
 A complete task has three phases: **convert** → **qualify** (confirm rxode2 reproduces NONMEM PRED/IPRED — *never skip this*) → **use** (sim, VPC, augPred, or hand off downstream).
 
@@ -454,7 +448,7 @@ Inspect the generated model body with `cat(deparse(as.function(mod)), sep = "\n"
 
 ## What you get back
 
-An **rxode2 UI object**, not an nlmixr2 fit. Useful slots:
+An **rxode2 UI object**, not an nlmixr2 fit — `babelmixr2::as.nlmixr2(mod)` promotes it to one. Useful slots (use `$`, which dispatches; `[[ ]]` does not):
 
 | Slot | Contents |
 |---|---|
@@ -465,6 +459,8 @@ An **rxode2 UI object**, not an nlmixr2 fit. Useful slots:
 | `$thetaMat` | THETA variance/covariance for uncertainty sims |
 | `$predData`, `$ipredData` | NONMEM PRED / IPRED |
 | `$predCompare`, `$ipredCompare`, `$iwresCompare` | rxode2 vs NONMEM diffs (qualification) |
+
+`$etaData` is only populated when you convert with `validate = TRUE`; otherwise it is empty and ETA-resampling fails with a confusing `arguments imply differing number of rows: 1, 0`.
 
 Because it's rxode2, downstream code is the same as any rxode2 model — solve with `et()` + `rxSolve()`, and use the two population-sim patterns from the rxode2 section (re-draw from `omega`, or resample the fitted subjects in `$etaData` to preserve post-hoc ETAs and attach covariates).
 
@@ -491,17 +487,15 @@ When given a task: **Read the control stream first** (note ADVAN, `$PRIOR`, `$MI
 - Duplicate ETA names: nonmem2rx won't auto-rename; fix the source ctl.
 - `$ipredCompare` shows large diffs → unsupported NONMEM construct; inspect the generated rxode2 model.
 - `rxSolve` after conversion errors with `parameter not found` → a THETA used inside `$ERROR` didn't propagate; patch the rxode2 model.
-- Treating the result as an nlmixr2 fit — it's an rxode2 UI.
+- Treating the result as an nlmixr2 fit — it's an rxode2 UI; use `babelmixr2::as.nlmixr2()`.
+- Resampling `$etaData` after a `validate = FALSE` conversion — the slot is empty; re-convert with `validate = TRUE`.
 - Skipping qualification because "it came from a real NONMEM run" — translation, not the run, is what's being qualified.
 
 ## nonmem2rx references (in the nonmem2rx repo)
 
 - `vignettes/import-nonmem.Rmd` — conversion basics
-- `vignettes/articles/convert-nlmixr2.Rmd` — promoting to nlmixr2 fit-like
-- `vignettes/articles/rxode2-validate.Rmd` — qualification workflow
-- `vignettes/articles/simulate-new-dosing.Rmd`, `simulate-uncertainty.Rmd`, `simulate-extra-items.Rmd`, `simulate-with-covs.Rmd`
-- `vignettes/articles/create-vpc.Rmd`, `create-augPred.Rmd`, `create-office.Rmd`
-- `vignettes/articles/read-rounding.Rmd` — handling NONMEM rounding errors
+- `vignettes/articles/`: `convert-nlmixr2` (promote to fit), `rxode2-validate` (qualification), `read-rounding` (rounding errors)
+- `vignettes/articles/`: `simulate-new-dosing`, `simulate-uncertainty`, `simulate-extra-items`, `simulate-with-covs`, `create-vpc`, `create-augPred`, `create-office`
 
 ---
 
@@ -529,7 +523,7 @@ mod <- monolix2rx("path/to/project.mlxtran")
 
 ## What you get back
 
-An **rxode2 model** (not an nlmixr2 fit) containing `$theta` (fixed effects), `$omega` (random-effect covariance), compartments/state variables, the μ-referencing table, and a normalized R-function model body. Solve it like any rxode2 model (`et()` + `rxSolve()`).
+An **rxode2 model** (not an nlmixr2 fit) containing `$theta` (fixed effects), `$omega` (random-effect covariance), compartments/state variables, the μ-referencing table, and a normalized R-function model body. Solve it like any rxode2 model (`et()` + `rxSolve()`), or promote it with `babelmixr2::as.nlmixr2(mod)`.
 
 | File / folder | Role |
 |---|---|
@@ -557,12 +551,10 @@ When given a task: **Read the `.mlxtran` first** (note custom distributions, IOV
 - `cannot find results folder` → results in a non-standard location; pass an absolute path or move them.
 - BLQ handling: CENS/LIMIT columns must survive translation; verify them in the dataset round-trip.
 - IPRED disagrees with Monolix → unsupported Mlxtran feature; inspect the generated rxode2 model.
-- Treating the result as an nlmixr2 fit — it's an rxode2 model.
+- Treating the result as an nlmixr2 fit — it's an rxode2 model; use `babelmixr2::as.nlmixr2()`.
 - Skipping qualification because "Monolix already converged".
 
 ## monolix2rx references (in the monolix2rx repo)
 
-- `vignettes/articles/convert-nlmixr2.Rmd` — promoting to nlmixr2 fit-like
-- `vignettes/articles/rxode2-validate.Rmd` — qualification against Monolix
-- `vignettes/articles/simulate-new-dosing.Rmd`, `simulate-uncertainty.Rmd`, `simulate-extra-items.Rmd` — downstream simulation patterns
-- `vignettes/articles/create-vpc.Rmd`, `create-augPred.Rmd`, `create-office.Rmd` — reporting
+- `vignettes/articles/`: `convert-nlmixr2` (promote to fit), `rxode2-validate` (qualification vs Monolix)
+- `vignettes/articles/`: `simulate-new-dosing`, `simulate-uncertainty`, `simulate-extra-items`, `create-vpc`, `create-augPred`, `create-office`

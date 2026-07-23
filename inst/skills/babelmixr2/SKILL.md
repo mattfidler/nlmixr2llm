@@ -5,7 +5,7 @@ description: Use this skill when the user wants to fit an nlmixr2-style model us
 
 # babelmixr2 — run nlmixr2 models on other engines
 
-`babelmixr2` translates an nlmixr2 model function into the input format of another tool (NONMEM, Monolix, PKNCA), runs that tool, parses the results back, and hands you what looks like a normal `nlmixr2` fit object. The user writes one model in nlmixr2 syntax and can fit it across engines for cross-validation, regulatory submission, or NCA.
+`babelmixr2` translates an nlmixr2 model function into the input format of another tool (NONMEM, Monolix, PKNCA, and several R packages), runs that tool, reads its output files back onto the model it already has, and hands you what looks like a normal `nlmixr2` fit object. The user writes one model in nlmixr2 syntax and can fit it across engines for cross-validation, regulatory submission, or NCA.
 
 ## When to use this skill
 
@@ -23,6 +23,16 @@ Activate whenever the user is:
 | `"nonmem"` | Generates a control stream + dataset, runs NONMEM via `runCommand`, reads results back and combines with the original model to return an nlmixr2 fit object |
 | `"monolix"` | Generates an `.mlxtran` project + dataset, runs Monolix (CLI or `lixoftConnectors`), reads results back and combines the original model to return an nlmixr2 fit object |
 | `"pknca"` | Runs non-compartmental analysis via `PKNCA` on the dataset and wraps the result in an nlmixr2-shaped object — useful as a starting point for popPK initial estimates |
+
+babelmixr2 registers several further backends that route the same model function to other R packages. They are less commonly used but are real `est=` values:
+
+| `est=` | Backend | Control |
+|---|---|---|
+| `"poped"` | Optimal design via `PopED` | see the PopED article |
+| `"saemix"` | SAEM via the `saemix` package | `saemixControl()` |
+| `"nlmer"` | `lme4::nlmer` | `nlmerControl()` |
+| `"fmeMcmc"` | MCMC via `FME::modMCMC` | `fmeMcmcControl()` |
+| `"pseudoOptim"` | Pseudo-random optimization | — |
 
 ## Minimum viable example — NONMEM
 
@@ -87,7 +97,7 @@ fit <- nlmixr(pk.turnover.emax3, nlmixr2data::warfarin, "monolix",
 3. **Tell babelmixr2 where the engine lives.** Configure once per session:
    - NONMEM: `options("babelmixr2.nonmem" = "nmfe743")` (or full path), or pass `runCommand=` to `nonmemControl()`.
    - Monolix: install `lixoftConnectors` and it auto-detects, or set `options("babelmixr2.monolix" = "monolix")`, or pass `runCommand=` to `monolixControl()`.
-4. **`runCommand` can be a function.** Useful for cluster submission — return after the run completes and the output files exist.
+4. **`runCommand` can be a function.** Signature is `function(ctl, directory, ui)`. Useful for cluster submission — return after the run completes and the output files exist. Setting it to `NA` makes `nlmixr()` stop after writing the engine input without running anything.
 5. **The result is an nlmixr2 fit.** Standard post-processing works: `fit$parFixed`, `augPred(fit)`, `vpcPlot(fit)`, `fit$omega`, `as.data.frame(fit)`. If something appears missing, it usually means the import hit an unsupported output — see Debugging below.
 6. **PKNCA is the odd one out.** `est = "pknca"` doesn't fit a model — it runs NCA and returns an object you can use to seed initial estimates for a subsequent popPK fit. Drive it with `pkncaControl(concu=, doseu=, timeu=, volumeu=)`.
 
@@ -106,7 +116,7 @@ The skill is "done" only when the fit has been **executed and inspected**, not j
 |---|---|
 | `could not find NONMEM` / `could not find Monolix` | `runCommand` not set or wrong; check `getOption("babelmixr2.nonmem")` |
 | Run launches but exits with rounding errors | model didn't converge — same fix as in NONMEM directly; consider `nonmemControl(readRounding = TRUE)` to read partial results |
-| Fit object missing standard errors / `$parFixed` empty | back-translation (via `nonmem2rx` / `monolix2rx`) failed silently — load the engine output file directly and inspect |
+| Fit object missing standard errors / `$parFixed` empty | reading the engine's output files failed silently — load the engine output independently with `nonmem2rx()` / `monolix2rx()` and inspect |
 | Parameter estimates differ from a hand-written ctl | check transforms — babelmixr2 generates `MU`-referenced code; manual ctls often don't |
 | Monolix run "succeeds" but no fit | `lixoftConnectors` not installed *and* `babelmixr2.monolix` option unset |
 | PKNCA result has no concentrations | unit args (`concu`, `doseu`, `timeu`, `volumeu`) missing or inconsistent with the dataset |
@@ -114,11 +124,11 @@ The skill is "done" only when the fit has been **executed and inspected**, not j
 ## What NOT to do
 
 - Don't rewrite the model in NONMEM control-stream syntax by hand. The whole point of babelmixr2 is to *not* do that.
-- Don't trust a fit you haven't inspected. Engine runs can "succeed" and still produce a degenerate fit object if model import broke.
+- Don't trust a fit you haven't inspected. Engine runs can "succeed" and still produce a degenerate fit object if reading the results broke.
 - Don't mix `est=` between runs without changing `modelName` — output directories will collide.
-- Don't ignore `nonmem2rx` / `monolix2rx` errors during back-translation; they're the canary for unsupported features.
+- Don't ignore `nonmem2rx` / `monolix2rx` errors raised while reading engine output; they're the canary for unsupported features.
 
-## In-repo references
+## References (in the babelmixr2 source repo, github.com/nlmixr2/babelmixr2)
 
 - `vignettes/articles/running-nonmem.Rmd` — full NONMEM workflow
 - `vignettes/articles/running-monlix.Rmd` — full Monolix workflow
@@ -128,4 +138,8 @@ The skill is "done" only when the fit has been **executed and inspected**, not j
 
 ## Relationship to nonmem2rx and monolix2rx
 
-`babelmixr2` is the *forward* path (nlmixr2 → engine). `nonmem2rx` and `monolix2rx` are the *backward* path (engine output → rxode2/nlmixr2). babelmixr2 does not call the backward translation after the run completes because it already knows what the original nlmixr2 model was.  If a babelmixr2 fit looks broken, the bug is almost always in import — you can debug this by trying to load the engine output directly with `nonmem2rx()` / `monolix2rx()` and seeing if a nlmixr2 fit can be generated from these outputs.
+`babelmixr2` is the *forward* path (nlmixr2 → engine). `nonmem2rx` and `monolix2rx` are the *backward* path (engine output → rxode2/nlmixr2).
+
+babelmixr2 does **not** call the backward *model* translation after a run completes, because it already knows what the original nlmixr2 model was. What it does use are those packages' low-level output readers — `nonmem2rx::nminfo()`, `nmext()`, `nmtab()`, `nmcov()`, `nmxml()` and the Monolix equivalents — to pull estimates, covariance, and tables off disk and attach them to the model it already has.
+
+So if a babelmixr2 fit looks broken, suspect result reading or engine convergence rather than model translation. Debug by loading the engine output directly with `nonmem2rx()` / `monolix2rx()` and calling `babelmixr2::as.nlmixr2()` on the result: that is an independent path to the same run, so a clean result there points at babelmixr2's reader, and a bad result there points at the engine output.

@@ -62,7 +62,7 @@ Always run the example (or its adapted form) and confirm the fit converges and p
 
 1. **Function-style UI.** A model is an R function returning `ini({}) / model({})`. Hand the function itself (not `model()`) to `nlmixr2()` — `nlmixr2()` instantiates it internally.
 2. **Parameterize on the log/logit scale.** Convention: `tka <- log(1.57)` in `ini`, then `ka <- exp(tka + eta.ka)` in `model`. Use `logit()` / `expit()` for parameters bounded to (0, 1), or the expanded `logit(est, low, hi)` / `expit(est, low, hi)` for parameters bounded to (low, hi).
-3. **Random effects** use `~` with a starting variance (e.g. `eta.cl ~ 0.3`). Off-diagonal blocks: write multiple etas on one line with `+` and supply a matrix start.
+3. **Random effects** use `~` with a starting variance (e.g. `eta.cl ~ 0.3`). Off-diagonal blocks: join the etas with `+` on one line and give a lower-triangular matrix start, e.g. `eta.cl + eta.v ~ c(0.3, 0.01, 0.1)`.
 4. **Residual error** lives at the end of `model({})` and uses the rxode2 error functions:
    - `cp ~ add(add.sd)` — additive
    - `cp ~ prop(prop.sd)` — proportional
@@ -71,10 +71,10 @@ Always run the example (or its adapted form) and confirm the fit converges and p
    - `cp ~ add(add.sd) + boxCox(lambda)` - Box-Cox + additive
    - `cp ~ add(add.sd) + dt(df)` - t-distribution with `df` degrees of freedom
    - `ll(cp) ~ likelihood` - generalized likelihood for an endpoint
-   - Multi-endpoint: one line per endpoint, optionally with `| endpointName`.
+   - Multi-endpoint: one line per endpoint, with a bare `| endpointName` (see below).
 5. **Algebraic definitions** (e.g. `cp <- center / v`) must appear before they're used and before the residual error line.
 6. **Pick `est=` deliberately:**
-   - `"saem"` — robust default for most popPK/popPD problems; doesn't compute Objective function by itself (but can be added with `addCwres()` or `AIC(fit)`).
+   - `"saem"` — robust default for most popPK/popPD problems. It *does* compute standard errors (`saemControl(covMethod = "sa")` is the default). It does not compute the objective function during the fit; the first access to `fit$objf` / `AIC(fit)` triggers a Gaussian-quadrature `-2LL` calculation, and `addCwres()` adds the FOCEi objective plus CWRES.
    - `"focei"` — gradient-based, gives Hessian-based SEs, more sensitive to initial estimates and stiff models, but can be used with generalized likelihood.
    - `"foce"` — FOCE without interaction.
    - `"fo"` — first-order; mostly for legacy comparison.
@@ -84,7 +84,32 @@ Always run the example (or its adapted form) and confirm the fit converges and p
      model with a small number of between subject variability (etas).
    - `"nlme"` — wraps R's `nlme` package; fine for simple problems.
    - `"posthoc"` — empirical Bayes only; freezes THETAs/OMEGAs and computes ETAs for the given data. Useful after a fit when you have new individuals.
-7. **Always pass a control object** matched to `est`: `saemControl()`, `foceiControl()`, `foceControl()`, `foControl()`, `laplaceControl()`, `agqControl()` ,`nlmeControl()`. Set `print = 0` for quieter logs in scripts.
+   - `"foi"` — first-order with interaction.
+
+   Newer engines in `nlmixr2est` (each with a matching `<name>Control()`):
+
+   | `est=` | Method |
+   |---|---|
+   | `"vae"` | Variational autoencoder; supports covariate selection via `vaeControl(covSelectMethod=)` |
+   | `"advi"` | Automatic differentiation variational inference |
+   | `"npag"` | Nonparametric adaptive grid |
+   | `"npb"` | Nonparametric Bayes |
+   | `"impmap"` | Importance-sampling EM (with MAP search) |
+   | `"imp"` | Importance-sampling EM without MAP search |
+   | `"qrpem"` | Quasi-random parametric EM (impmap with `qr=TRUE`, `sir=TRUE`) |
+
+   The FOCEI-family, quadrature, and nonparametric methods also have **mu-referenced** variants with matching `*Control()` functions: `mfocei`/`ifocei`, `mfoce`/`ifoce`, `mfocep`/`ifocep`, `magq`/`iagq`, `mlaplace`/`ilaplace`, `mnpag`/`inpag`, `mnpb`/`inpb`.
+
+   Both prefixes are mu-referenced; they differ only in how mu-referenced population and covariate-coefficient thetas are profiled out of the outer optimizer — `m*` uses an in-C++ OLS regression (`muModel = "lin"`), `i*` uses IRLS (`muModel = "irls"`). **The `i` prefix means IRLS, not interaction.** Tune with `foceiControl(muModel=, muRefCovAlg=, muModelTol=, muModelMaxCycles=, muModelClampRetries=)`.
+
+   A trailing **`f`** marks the *fast* variant — `focef`, `foceif`, `focepf`, `agqf`, and the `m*`/`i*` forms (`mfoceif`, `ifoceif`, `magqf`, `iagqf`, …). These force `foceiControl(fast = TRUE)`, which computes the analytic overall outer gradient (Almquist 2015) and optimizes by gradient descent instead of a derivative-free search. When you haven't picked an `outerOpt` yourself, the default switches from `bobyqa` to the gradient-based `lbfgsb3c`; an explicit `outerOpt` is respected. Prefer these when the model is in analytic scope — same objective, faster convergence.
+
+   The `foceiControl()` `outerOpt` default is **`bobyqa`** (not `nlminb`). Alternatives: `nlminb`, `lbfgsb3c`, `L-BFGS-B`, `mma`, `lbfgsbLG`, `slsqp`, `uobyqa`, `newuoa`.
+
+   `nlmixr2est` registers ~76 `est=` values in total; enumerate them with `methods("nlmixr2Est")` rather than guessing.
+
+   Mixture models via `mix()` are supported for `focei`, `foce`, `foi`, and `fo`.
+7. **Always pass a control object** matched to `est`: `saemControl()`, `foceiControl()`, `foceControl()`, `foControl()`, `laplaceControl()`, `agqControl()`, `nlmeControl()`, `posthocControl()`. Set `print = 0` for quieter logs in scripts.
 8. **Data format.** Standard NONMEM-style: `ID`, `TIME`, `EVID`, `AMT`, `CMT` (or `cmt` matching compartment names), `DV`, optional covariates. nlmixr2 also accepts compartment names in `CMT` rather than integers.
 
 ## Workflow
@@ -117,16 +142,23 @@ For residual diagnostics use `as.data.frame(fit)` to get the per-row table with 
 ## Multi-endpoint models
 
 ```r
+ini({
+  # ... structural parameters ...
+  pk.sd  <- 0.7      # residual SD for the cp endpoint
+  eff.sd <- 10       # residual SD for the effect endpoint
+})
 model({
   # ...
   cp     <- center / v
   effect <- e0 - emax * cp / (ec50 + cp)
-  cp     ~ add(prop.sd)              | cp
+  cp     ~ add(pk.sd)                | cp
   effect ~ add(eff.sd)               | effect
 })
 ```
 
-Use  `| endpoint` (do NOT use `dvid("endpoint")`) to bind each error line to a row category in the dataset's `DVID` column.
+Every residual-error parameter must be declared in `ini({})` just like a THETA.
+
+Bind each error line to a row category in the dataset's `DVID` column with a **bare endpoint name** after `|`. Do **not** write `| dvid("endpoint")` — that is a hard parse error (`the condition 'dvid("cp")' must be a simple name`), not a deprecation warning.
 
 ## Debugging quick reference
 
@@ -134,10 +166,11 @@ Use  `| endpoint` (do NOT use `dvid("endpoint")`) to bind each error line to a r
 |---|---|
 | `parameter not found` at compile | symbol used in `model({})` not declared in `ini({})`, not a compartment, not in the data |
 | SAEM runs forever / huge OFV swings | bad initial estimates, especially on the log scale; sanity-check `exp(tka)` etc. |
-| FOCEi fails with Hessian errors | over-parameterized OMEGA, near-zero variance estimate, or model identifiability issue — try fewer ETAs or fix small variances, or try other outerOpt optimizations like `foceiControl(outerOpt="bobyqa")` for instance |
-| `vpcPlot` empty / wrong | residual error not specified, or `dvid` mismatched between model and data |
+| FOCEi fails with Hessian errors | over-parameterized OMEGA, near-zero variance estimate, or identifiability issue — use fewer ETAs, fix small variances, or switch optimizer away from the `bobyqa` default (e.g. `foceiControl(outerOpt = "nlminb")`, or `fast = TRUE` for `lbfgsb3c`) |
+| `vpcPlot` empty / wrong | residual error not specified, or the endpoint names after `|` don't match the dataset's `DVID` values |
 | `augPred` flat | dosing into wrong compartment, or `cmt=` in data doesn't match `d/dt(name)` |
-| Output looks fine but `$parFixed` SEs are NA | SAEM doesn't compute them; refit with FOCEi or call `addCwres()` / `nlmixr2Est` post-processing |
+| `$parFixed` SEs are NA on a SAEM fit | Not expected — SAEM computes SEs by default. Check whether `covMethod = ""` was passed, or whether the covariance step failed (`fit$covMethod` reports what actually ran) |
+| Residual-error SE prints as a denormal (`9.39e-323`, `6.95e-310`) | Known bug ([nlmixr2est#816](https://github.com/nlmixr2/nlmixr2est/issues/816)) affecting SAEM `covMethod="sa"` and `"linFim"`. The correct SE is already in `fit$cov` — read `sqrt(diag(fit$cov))[["<par>"]]`. Don't report the `parFixed` value, and don't conclude SEs are unavailable |
 
 ## What NOT to do
 
@@ -146,7 +179,7 @@ Use  `| endpoint` (do NOT use `dvid("endpoint")`) to bind each error line to a r
 - Don't skip the fit step. A model that "looks right" but never converged is not delivered.
 - Don't rely on default initial estimates — set them on the right scale, and call `label()` on each THETA so the printout is readable.
 
-## In-repo references
+## References (in the nlmixr2 source repo, github.com/nlmixr2/nlmixr2)
 
 - `vignettes/running_nlmixr.Rmd` — canonical intro
 - `vignettes/multiple-endpoints.Rmd` — multi-endpoint specification

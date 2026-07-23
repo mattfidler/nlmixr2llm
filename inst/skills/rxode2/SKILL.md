@@ -30,9 +30,9 @@ mod <- function() {
     V  <- 40.2
   })
   model({
-    C  <- centr / V
-    d/dt(depot) <- -KA * depot
-    d/dt(centr) <-  KA * depot - (CL/V) * centr
+    C  <- central / V
+    d/dt(depot)   <- -KA * depot
+    d/dt(central) <-  KA * depot - (CL/V) * central
   })
 }
 mod <- mod()                              # instantiate the UI object
@@ -52,14 +52,18 @@ Always run the example (or its adapted form) and confirm it compiles and solves 
 
 1. **Model structure.** Use the function-style UI: an R function returning `ini({}) / model({})`. Call the function once (`mod <- mod()`) to get the UI object that `rxSolve` accepts.
 2. **Compartments come from `d/dt(name)`.** The compartment is named by what's inside `d/dt(...)`. Reference it elsewhere (events, initial conditions) by that exact name.
+
+   At solve time rxode2 may replace a mass-balanced linear ODE system with the equivalent analytic `linCmt()` solved form (`odeToLin()`; `linToOde()` is the inverse). This is a speed optimization — the analytic solution beats numeric integration — and it is why a `depot` + `centr` model logs `renaming compartments` and returns a solved column called `central`: `linCmt()` uses the canonical names `depot` / `central` / `peripheral1` / `peripheral2`. `mod$state` still reports `centr` because the UI keeps the ODE form; the two are different views, not a disagreement. **Spell the central compartment `central` and they agree.** A model that isn't mass-balanced (e.g. an effect compartment with its own turnover) isn't converted and keeps your names.
+
+   The conversion is skipped when the event data doses a compartment whose name it would rename away, so `cmt = "centr"` still solves — you just silently fall back to the slower ODE path. Naming compartments the `linCmt()` way is how you keep the speedup.
 3. **Initial conditions** go inside `model({})` as `name(0) <- value`, *not* in `ini({})`.
-4. **Algebraic definitions** (e.g. `C <- centr/V`) must appear before the ODEs that use them.
+4. **Algebraic definitions** (e.g. `C <- central/V`) must appear before the ODEs that use them.
 5. **Parameters.** Fixed effects in `ini({})` use `<-`. Random effects (between-subject variability) use `~` with a variance, e.g. `eta.cl ~ 0.1`. Residual error similarly: `add.err <- 0.1` then in `model` use `cp ~ add(add.err)`.
 6. **Dose by compartment name** in `et()` (`cmt = "depot"`) — clearer than NONMEM-style integer indices and rxode2 supports it natively.
 7. **Override parameters at solve time** via `params = c(CL = 20)` rather than editing `ini({})` for one-off scenarios.
 8. **Population sims.** Use `nSub` / `nStud` on `rxSolve`, supply `omega=` / `sigma=` / `thetaMat=` for variability and uncertainty propagation. Use `cores=` for parallelism. For per-subject parameters or covariates, pass a `params=` data.frame keyed by `id` alongside an `events=` event table — or merge them into a single table (required if you have time-varying covariates).
 9. **Reproducibility.** Set both `set.seed(...)` *and* `rxode2::rxSetSeed(...)` — they cover R-level and rxode2 internal RNG respectively.
-10. **Population CIs.** Summarize a multi-subject sim with `confint(sim, "ipred", level = 0.95) |> plot()` (or any solved variable name) to get a median + ribbon plot.
+10. **Population CIs.** Summarize a multi-subject sim with `confint(sim, "C", level = 0.95) |> plot()` — name any solved variable (`"ipred"` only exists if the model has a residual-error block). rxode2 warns below ~2500 replicates that the bands aren't trustworthy, so size `nSub`/`nStud` accordingly.
 
 ## Event-table cheatsheet
 
@@ -74,10 +78,10 @@ et() |> et(amt = 100, addl = 9, ii = 12, cmt = "depot") |> et(0:120)
 et() |> et(amt = 100, ii = 12, ss = 1, cmt = "depot") |> et(0:24)
 
 # Infusion (rate-based)
-et() |> et(amt = 100, rate = 10, cmt = "centr") |> et(0:24)
+et() |> et(amt = 100, rate = 10, cmt = "central") |> et(0:24)
 
 # Infusion (duration-based)
-et() |> et(amt = 100, dur = 10, cmt = "centr") |> et(0:24)
+et() |> et(amt = 100, dur = 10, cmt = "central") |> et(0:24)
 
 # Multi-subject
 et() |> et(amt = 100, cmt = "depot") |> et(0:24) |> et(id = 1:50)
@@ -114,12 +118,12 @@ The skill is "done" only when the model has been **executed and inspected**, not
 
 ## What NOT to do
 
-- Don't invent rxode2 syntax. If unsure, check `inst/syntax-functions.csv` or the vignettes in `vignettes/` and `vignettes/articles/` in this repo.
+- Don't invent rxode2 syntax. If unsure, check `inst/syntax-functions.csv` or the vignettes under `vignettes/` in the rxode2 source repo (github.com/nlmixr2/rxode2).
 - Don't hand the user pseudocode. Always produce a complete, runnable script with `library(rxode2)`.
 - Don't skip the run step. A model that "looks right" but never compiled is not delivered.
 - Don't overwrite the user's existing model parameters silently — if you change `ini({})` values, call it out.
 
-## In-repo references
+## References (in the rxode2 source repo, github.com/nlmixr2/rxode2)
 
 - `vignettes/rxode2-intro.Rmd` — canonical intro example
 - `vignettes/rxode2-syntax.Rmd` — model language reference

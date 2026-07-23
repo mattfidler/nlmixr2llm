@@ -13,7 +13,7 @@ Activate whenever the user is:
 
 - Converting a finished Monolix run to rxode2 for simulation, VPC, or sharing.
 - Pulling THETA / OMEGA / IIV out of a Monolix project into R.
-- Converting Monolix output back into nlmixr2 fit (often via `babelmixr2::as.nlmxir2()`).
+- Converting Monolix output back into an nlmixr2 fit (via `babelmixr2::as.nlmixr2()`).
 - Parsing an `.mlxtran` file structurally without running a full conversion (`mlxtran()`).
 
 ## Minimum viable example
@@ -82,7 +82,7 @@ The skill is "done" only when the converted model has been **executed and qualif
 - Don't treat the result from `monolix2rx()` as an nlmixr2 fit — it's an rxode2 model
 - Treat the result from `babelmixr2::as.nlmixr2()` as a nlmixr2 fit.
 
-## In-repo references
+## References (in the monolix2rx source repo, github.com/nlmixr2/monolix2rx)
 
 - `vignettes/articles/convert-nlmixr2.Rmd` — promoting to nlmixr2 fit-like
 - `vignettes/articles/rxode2-validate.Rmd` — qualification against Monolix
@@ -91,4 +91,8 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 ## Relationship to babelmixr2
 
-`babelmixr2`'s Monolix saves the model to a file and reads the outputs to construct a nlmixr2 fit.  This backend uses `monolix2rx` to read Monolix results back into R after a Monolix fit. `babelmixr2` also has a function `as.nlmixr2()` to convert the rxode2 model from `monolix2rx` to a `nlmixr2` fit. If a babelmixr2 Monolix fit looks wrong, try to get around the failure by loading the same `.mlxtran` directly with `monolix2rx()` — that provides a different path to read a Monolix run into rxode2 and nlmixr2.
+`babelmixr2`'s Monolix backend writes the model out, runs Monolix, and reads the results folder to construct an nlmixr2 fit. It uses `monolix2rx`'s low-level readers for that, but it does **not** run the full `monolix2rx()` model back-translation — it already knows the original nlmixr2 model, so there is nothing to translate back.
+
+`babelmixr2::as.nlmixr2()` is the function that converts an rxode2 model produced by `monolix2rx()` into an `nlmixr2` fit.
+
+If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` directly with `monolix2rx()`. That is a genuinely *different* code path into the same run, so it both works around the failure and localizes it: if the independent conversion looks right, the problem is in babelmixr2's result reading; if it looks wrong too, the problem is in the Monolix output itself.

@@ -41,7 +41,7 @@ The returned object **is** an rxode2 UI, so anything that works on an rxode2 mod
 ## Authoring rules
 
 1. **Inputs.** `nonmem2rx()` accepts either the control stream (`.ctl`/`.mod`) or the listing file (`.lst`/`.res`) as its first argument and finds the rest alongside. The XML output, `.phi`, and the input dataset should also live in the same directory. If passing a control stream and the listing has a non-default extension, use `lst="..."` to point at it.
-2. **`validate = TRUE`.** Pass this on the conversion call to run rxode2-vs-NONMEM qualification automatically and populate the `$ipredCompare` / `$predCompare` slots. Make this the default in any script you write.
+2. **`validate = TRUE`.** Pass this on the conversion call to run rxode2-vs-NONMEM qualification automatically and populate the `$ipredCompare` / `$predCompare` slots. It also populates `$etaData` — without it that slot is empty and the ETA-resampling pattern below fails with a confusing `arguments imply differing number of rows: 1, 0`. Make this the default in any script you write.
 3. **`save=`.** Defaults to `FALSE`. Set `save = TRUE` to cache the parsed object as an `.rds` next to the source — useful for big runs you'll re-load.
 4. **Returned object is rxode2 UI, not a fit.** Treat it like a model. To see the generated rxode2 model body: `cat(deparse(as.function(mod)), sep="\n")`. To get nlmixr2-style post-processing (residuals, VPCs against the original data) convert it via the conversion vignette workflow rather than calling `nlmixr2()` again from scratch.
 5. **Useful slots on the result:**
@@ -54,7 +54,7 @@ The returned object **is** an rxode2 UI, so anything that works on an rxode2 mod
    - `$ipredCompare`, `$predCompare`, `$iwresCompare` — rxode2-vs-NONMEM diffs
 6. **Qualification first.** Before doing *anything* downstream (sim, VPC, reporting), call `plot(mod)` (and `plot(mod, page=1, log="y")` for log-scale) and check `$ipredCompare` / `$predCompare`. If rxode2 and NONMEM disagree on IPRED, the translation has a problem and downstream results are not trustworthy.
 7. **Simulating new dosing.** Build a fresh `et()` event table and call `rxSolve(mod, ev)` — same pattern as any rxode2 model. Use `thetaMat=` from the converted object to propagate parameter uncertainty.
-8. **Resampling fitted subjects** (preferred over re-drawing from `omega` when you want to honor post-hoc ETAs):
+8. **Resampling fitted subjects** (preferred over re-drawing from `omega` when you want to honor post-hoc ETAs). Requires a `validate = TRUE` conversion so `$etaData` is populated:
 
    ```r
    # Build a per-subject parameter table from the fitted ETAs + THETAs
@@ -113,7 +113,7 @@ The skill is "done" only when the converted model has been **executed and qualif
 - Don't rebuild the NONMEM model from scratch in rxode2 by hand "to be safe" — that defeats the qualification story. Use the converted object and only patch what the diff shows is broken.
 - Don't promise nlmixr2 fit semantics from a bare `nonmem2rx()` call — it returns an rxode2 UI, not a fit object.
 
-## In-repo references
+## References (in the nonmem2rx source repo, github.com/nlmixr2/nonmem2rx)
 
 - `vignettes/import-nonmem.Rmd` — basic conversion walkthrough
 - `vignettes/articles/convert-nlmixr2.Rmd` — promoting to an nlmixr2 fit-like object
@@ -124,4 +124,8 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 ## Relationship to babelmixr2
 
-`babelmixr2` uses `nonmem2rx` to read NONMEM results back when you fit a model with `est = "nonmem"`. If a babelmixr2 NONMEM fit looks wrong, the translation problem is usually in nonmem2rx — debug it by loading the same `.ctl` directly with `nonmem2rx()` and inspecting `$ipredCompare`.
+When you fit with `est = "nonmem"`, `babelmixr2` runs NONMEM and reads its output files using `nonmem2rx`'s **low-level readers** (`nminfo()`, `nmext()`, `nmtab()`, `nmcov()`, `nmxml()`). It does **not** call the full `nonmem2rx()` model back-translation — it already has the original nlmixr2 model, so there is no model to reconstruct.
+
+That means a broken babelmixr2 NONMEM fit is usually a result-reading or engine-convergence problem rather than a model-translation problem. Loading the same `.ctl` directly with `nonmem2rx()` is still the right diagnostic, because it is an independent path to the same run: if that conversion qualifies cleanly against `$ipredCompare`, the fault is in babelmixr2's reading; if it doesn't, the NONMEM output itself is the problem.
+
+Going the other way, `babelmixr2::as.nlmixr2()` promotes a `nonmem2rx()` object into a full nlmixr2 fit.
