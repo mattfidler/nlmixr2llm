@@ -120,7 +120,8 @@ The skill is "done" only when the model has been **fit, converged, and inspected
 2. Run it. Capture the convergence summary and OFV.
 3. Inspect `print(fit)`, `fit$parFixed` (estimates, SE, %RSE, BSV%, shrinkage), `fit$omega`.
 4. Run at least one diagnostic: `augPred(fit)` for individual fits or `vpcPlot(fit)` for predictive performance.
-5. Only then report results.
+5. Confirm the OFV is finite and **no parameter is hugging a boundary**. A "converged" fit with a parameter sitting at its bound has not really estimated that parameter — rethink the model rather than reporting it.
+6. Only then report results.
 
 ## Diagnostic / post-processing cheatsheet
 
@@ -159,6 +160,22 @@ model({
 Every residual-error parameter must be declared in `ini({})` just like a THETA.
 
 Bind each error line to a row category in the dataset's `DVID` column with a **bare endpoint name** after `|`. Do **not** write `| dvid("endpoint")` — that is a hard parse error (`the condition 'dvid("cp")' must be a simple name`), not a deprecation warning.
+
+**Simulating a multi-endpoint model:** every observation record must say which endpoint it belongs to, so a plain sampling grid fails:
+
+```
+'dvid'->'cmt' or 'cmt' on observation record or on a undefined compartment (use 'cmt()' 'dvid()')
+```
+
+Add one sampling pass per endpoint, each naming its endpoint in `cmt`:
+
+```r
+ev <- et(amt = 320, cmt = "depot") |>
+  et(seq(0, 48, by = 0.5), cmt = "cp") |>
+  et(seq(0, 48, by = 0.5), cmt = "effect")
+```
+
+This is a simulation/event-table requirement only — a model that fits fine can still fail here.
 
 ## Debugging quick reference
 

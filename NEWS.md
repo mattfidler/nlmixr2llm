@@ -1,5 +1,42 @@
 # nlmixr2llm (development version)
 
+## Agent restructured as an orchestration layer
+
+The `nlmixr2verse` agent carried ~25 KiB of per-package depth that duplicated
+the five skills, which pushed it against Codex's 32 KiB `AGENTS.md` cap and left
+no room to grow.
+
+The root cause was a frontmatter bug: the agent declared an explicit
+`tools:` allowlist that omitted `Skill`, so it could not invoke the skills
+installed beside it and had to inline their content. A subagent with an explicit
+allowlist can only load skills if `Skill` is listed.
+
+* `Skill` added to the agent's `tools`. The agent now holds the ecosystem map,
+  the shared conventions, and a short quick-reference card per package, and
+  loads the relevant skill on demand for full depth. It went from ~31 KiB to
+  ~11 KiB with no loss of content.
+* Content that lived only in the agent moved into the skill that owns it: the
+  `rxode2(mod)` instantiation form, the solve-time (not compile-time) timing of
+  compartment errors, and the `left_join` pattern for time-varying covariates
+  (rxode2); the boundary-parameter pitfall (nlmixr2); `readRounding`'s default
+  plus `sigdig`/`sigl`/`tol`, and the `MU`-reference / `$THETA` bounds / column
+  ordering checks (babelmixr2); the `$`-vs-`[[ ]]` dispatch note, the
+  `$PRIOR` / `$MIX` / custom `$PRED` / `$ERROR`-algebra translation pain points,
+  and the post-conversion `parameter not found` pitfall (nonmem2rx).
+* Fixed a leftover contradiction: the agent still advised
+  `foceiControl(outerOpt = "bobyqa")` as a remedy for FOCEi Hessian failures,
+  which is the default it was already using.
+* Codex installs benefit directly. `include = "agents"` now costs ~11 KiB
+  instead of ~32, so the agent plus one or two skills fits where previously the
+  agent alone consumed the entire budget. The one exception is
+  `c("rxode2", "nlmixr2")` — the two largest skills — which lands just over;
+  `include = "skills"` fits three. README carries the full size table.
+* Documented a multi-endpoint simulation trap found while testing the split:
+  observation records must name their endpoint in `cmt`, so a plain sampling
+  grid fails with `'dvid'->'cmt' or 'cmt' on observation record or on a
+  undefined compartment`. One sampling pass per endpoint fixes it. This is an
+  event-table requirement, so a model that fits fine can still fail here.
+
 ## Content corrections
 
 Verified the agent and skill content against rxode2 5.1.3, nlmixr2 6.0.0,

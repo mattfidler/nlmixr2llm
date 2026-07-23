@@ -100,6 +100,7 @@ fit <- nlmixr(pk.turnover.emax3, nlmixr2data::warfarin, "monolix",
 4. **`runCommand` can be a function.** Signature is `function(ctl, directory, ui)`. Useful for cluster submission — return after the run completes and the output files exist. Setting it to `NA` makes `nlmixr()` stop after writing the engine input without running anything.
 5. **The result is an nlmixr2 fit.** Standard post-processing works: `fit$parFixed`, `augPred(fit)`, `vpcPlot(fit)`, `fit$omega`, `as.data.frame(fit)`. If something appears missing, it usually means the import hit an unsupported output — see Debugging below.
 6. **PKNCA is the odd one out.** `est = "pknca"` doesn't fit a model — it runs NCA and returns an object you can use to seed initial estimates for a subsequent popPK fit. Drive it with `pkncaControl(concu=, doseu=, timeu=, volumeu=)`.
+7. **Other `nonmemControl()` arguments worth knowing.** `readRounding` defaults to `FALSE`; set `TRUE` to read partial results after a rounding-error finish. `sigdig`, `sigl`, and `tol` mirror the corresponding NONMEM `$EST` convergence options.
 
 ## Workflow
 
@@ -117,7 +118,7 @@ The skill is "done" only when the fit has been **executed and inspected**, not j
 | `could not find NONMEM` / `could not find Monolix` | `runCommand` not set or wrong; check `getOption("babelmixr2.nonmem")` |
 | Run launches but exits with rounding errors | model didn't converge — same fix as in NONMEM directly; consider `nonmemControl(readRounding = TRUE)` to read partial results |
 | Fit object missing standard errors / `$parFixed` empty | reading the engine's output files failed silently — load the engine output independently with `nonmem2rx()` / `monolix2rx()` and inspect |
-| Parameter estimates differ from a hand-written ctl | check transforms — babelmixr2 generates `MU`-referenced code; manual ctls often don't |
+| Parameter estimates differ from a hand-written ctl | babelmixr2 generates `MU`-referenced code and manual ctls often don't — check the `MU` references, the `$THETA` bounds, and the dataset column ordering |
 | Monolix run "succeeds" but no fit | `lixoftConnectors` not installed *and* `babelmixr2.monolix` option unset |
 | PKNCA result has no concentrations | unit args (`concu`, `doseu`, `timeu`, `volumeu`) missing or inconsistent with the dataset |
 

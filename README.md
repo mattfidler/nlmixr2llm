@@ -26,6 +26,8 @@ A single combined **`nlmixr2verse`** agent spans the whole ecosystem (the orches
 
 The `nlmixr2verse` agent covers all five packages and the end-to-end workflow that connects them (author in rxode2 → fit in nlmixr2 → run on other engines with babelmixr2 → import legacy runs with nonmem2rx / monolix2rx).
 
+The agent and the skills divide the work rather than duplicating it. The agent holds the ecosystem map, the conventions shared across all five packages, and a short quick-reference card per package — enough to route a task and stay clear of the known traps. Full per-package depth (API surface, runnable examples, debugging tables, vignette references) lives in the skills, and the agent loads the one it needs via the `Skill` tool. That is why its frontmatter lists `Skill` among its `tools`: an agent with an explicit `tools:` allowlist can only invoke skills if `Skill` appears in it.
+
 ## Install (R package)
 
 ```r
@@ -67,9 +69,22 @@ install_codex(scope = "project", packages = c("rxode2", "nlmixr2"))
 install_codex(scope = "user", mode = "append")
 ```
 
-Codex enforces a default 32 KiB cap on combined `AGENTS.md` content. The full corpus (~71 KiB) exceeds that. The combined `nlmixr2verse` agent is included whole whenever agents are requested, so `packages = ...` only subsets the skills. For Codex, install `include = "agents"` (just the agent, ~31.9 KiB — under the cap, but only barely) or `include = "skills"` (~40 KiB) with a `packages = ...` subset to stay under it.
+Codex enforces a default 32 KiB cap on combined `AGENTS.md` content, and the full corpus (~55 KiB) exceeds it. The `nlmixr2verse` agent is included whole whenever agents are requested, so `packages = ...` only subsets the skills — but because the agent is now the slim orchestration layer (~11 KiB), most useful combinations fit:
 
-The agent sits close enough to the cap that adding much more to `inst/agents/nlmixr2verse.md` will push `include = "agents"` over. The package's own test suite warns when that happens; if you see that warning, either trim the agent or raise `project_doc_max_bytes` in `~/.codex/config.toml`.
+| `install_codex(...)` | Size | Fits? |
+|---|---|---|
+| `include = "agents"` (agent alone) | ~11 KiB | ✓ |
+| `include = "both", packages = "rxode2"` | ~20 KiB | ✓ |
+| `include = "both", packages = "nlmixr2"` | ~24 KiB | ✓ |
+| `include = "both", packages = c("nonmem2rx", "monolix2rx")` | ~26 KiB | ✓ |
+| `include = "both", packages = c("rxode2", "babelmixr2")` | ~28 KiB | ✓ |
+| `include = "both", packages = c("rxode2", "nlmixr2")` | ~32 KiB | ✗ (just over) |
+| `include = "skills", packages = c("rxode2", "nlmixr2", "babelmixr2")` | ~30 KiB | ✓ |
+| `include = "both"` (all five skills) | ~56 KiB | ✗ |
+
+Rule of thumb: the agent plus one or two skills fits, except `rxode2` + `nlmixr2` together — those are the two largest skills and the pair lands just over. Drop the agent (`include = "skills"`) and three skills fit comfortably. If you want everything in one file, raise `project_doc_max_bytes` in `~/.codex/config.toml`. The package's own test suite warns whenever a generated `AGENTS.md` exceeds the cap.
+
+This is a Codex-only constraint. Claude Code installs the agent and skills as separate files with no size limit, and the Positron `instructions` style writes one file per unit.
 
 ### Install into Positron Assistant
 

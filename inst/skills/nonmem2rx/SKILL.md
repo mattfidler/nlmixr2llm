@@ -44,7 +44,7 @@ The returned object **is** an rxode2 UI, so anything that works on an rxode2 mod
 2. **`validate = TRUE`.** Pass this on the conversion call to run rxode2-vs-NONMEM qualification automatically and populate the `$ipredCompare` / `$predCompare` slots. It also populates `$etaData` — without it that slot is empty and the ETA-resampling pattern below fails with a confusing `arguments imply differing number of rows: 1, 0`. Make this the default in any script you write.
 3. **`save=`.** Defaults to `FALSE`. Set `save = TRUE` to cache the parsed object as an `.rds` next to the source — useful for big runs you'll re-load.
 4. **Returned object is rxode2 UI, not a fit.** Treat it like a model. To see the generated rxode2 model body: `cat(deparse(as.function(mod)), sep="\n")`. To get nlmixr2-style post-processing (residuals, VPCs against the original data) convert it via the conversion vignette workflow rather than calling `nlmixr2()` again from scratch.
-5. **Useful slots on the result:**
+5. **Useful slots on the result** (access with `$`, which dispatches on the rxode2 UI — `[[ ]]` does *not*):
    - `$nonmemData` — NONMEM table merged with the dataset
    - `$etaData` — per-ID empirical Bayes ETAs (great for resampling-based sims)
    - `$ini` — parameter table (THETA + variability), tidy data.frame form
@@ -53,6 +53,8 @@ The returned object **is** an rxode2 UI, so anything that works on an rxode2 mod
    - `$predData`, `$ipredData` — NONMEM PRED/IPRED
    - `$ipredCompare`, `$predCompare`, `$iwresCompare` — rxode2-vs-NONMEM diffs
 6. **Qualification first.** Before doing *anything* downstream (sim, VPC, reporting), call `plot(mod)` (and `plot(mod, page=1, log="y")` for log-scale) and check `$ipredCompare` / `$predCompare`. If rxode2 and NONMEM disagree on IPRED, the translation has a problem and downstream results are not trustworthy.
+
+   **Read the control stream first** and note the usual translation pain points before converting: an unusual `ADVAN`, a custom `$PRED`, `$PRIOR`, `$MIX`, manual algebra inside `$ERROR`, and duplicate ETA/parameter names. These are what a nonzero `$ipredCompare` diff almost always traces back to.
 7. **Simulating new dosing.** Build a fresh `et()` event table and call `rxSolve(mod, ev)` — same pattern as any rxode2 model. Use `thetaMat=` from the converted object to propagate parameter uncertainty.
 8. **Resampling fitted subjects** (preferred over re-drawing from `omega` when you want to honor post-hoc ETAs). Requires a `validate = TRUE` conversion so `$etaData` is populated:
 
@@ -106,6 +108,7 @@ The skill is "done" only when the converted model has been **executed and qualif
 | `rounding errors` in listing | NONMEM run didn't fully converge; use the `read-rounding` vignette workflow before trusting estimates |
 |  mismatch in `$ipredCompare` | unsupported NONMEM construct, or model uses an ADVAN/feature nonmem2rx doesn't translate cleanly — inspect the generated rxode2 model and reconcile by hand |
 | Duplicate ETA / parameter names | known limitation — nonmem2rx will not auto-rename; fix in the source ctl |
+| `parameter not found` from `rxSolve()` after a clean conversion | a THETA used inside `$ERROR` didn't propagate into the rxode2 model; patch the generated model |
 
 ## What NOT to do
 

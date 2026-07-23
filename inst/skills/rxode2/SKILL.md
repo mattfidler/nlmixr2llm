@@ -50,7 +50,7 @@ Always run the example (or its adapted form) and confirm it compiles and solves 
 
 ## Authoring rules
 
-1. **Model structure.** Use the function-style UI: an R function returning `ini({}) / model({})`. Call the function once (`mod <- mod()`) to get the UI object that `rxSolve` accepts.
+1. **Model structure.** Use the function-style UI: an R function returning `ini({}) / model({})`. Call the function once (`mod <- mod()`) to get the UI object that `rxSolve` accepts — `rxode2(mod)` does the same thing.
 2. **Compartments come from `d/dt(name)`.** The compartment is named by what's inside `d/dt(...)`. Reference it elsewhere (events, initial conditions) by that exact name.
 
    At solve time rxode2 may replace a mass-balanced linear ODE system with the equivalent analytic `linCmt()` solved form (`odeToLin()`; `linToOde()` is the inverse). This is a speed optimization — the analytic solution beats numeric integration — and it is why a `depot` + `centr` model logs `renaming compartments` and returns a solved column called `central`: `linCmt()` uses the canonical names `depot` / `central` / `peripheral1` / `peripheral2`. `mod$state` still reports `centr` because the UI keeps the ODE form; the two are different views, not a disagreement. **Spell the central compartment `central` and they agree.** A model that isn't mass-balanced (e.g. an effect compartment with its own turnover) isn't converted and keeps your names.
@@ -61,7 +61,17 @@ Always run the example (or its adapted form) and confirm it compiles and solves 
 5. **Parameters.** Fixed effects in `ini({})` use `<-`. Random effects (between-subject variability) use `~` with a variance, e.g. `eta.cl ~ 0.1`. Residual error similarly: `add.err <- 0.1` then in `model` use `cp ~ add(add.err)`.
 6. **Dose by compartment name** in `et()` (`cmt = "depot"`) — clearer than NONMEM-style integer indices and rxode2 supports it natively.
 7. **Override parameters at solve time** via `params = c(CL = 20)` rather than editing `ini({})` for one-off scenarios.
-8. **Population sims.** Use `nSub` / `nStud` on `rxSolve`, supply `omega=` / `sigma=` / `thetaMat=` for variability and uncertainty propagation. Use `cores=` for parallelism. For per-subject parameters or covariates, pass a `params=` data.frame keyed by `id` alongside an `events=` event table — or merge them into a single table (required if you have time-varying covariates).
+8. **Population sims.** Use `nSub` / `nStud` on `rxSolve`, supply `omega=` / `sigma=` / `thetaMat=` for variability and uncertainty propagation. Use `cores=` for parallelism.
+
+   Two patterns for per-subject parameters/covariates — **A. re-draw from `omega`** (`rxSolve(mod, ev, nSub = 100)`), or **B. supply a per-subject table** when you have specific parameter sets per ID (e.g. post-hoc ETAs from a `nonmem2rx` conversion):
+
+   ```r
+   # sub_df has columns: id, CL, V, ... and any non-time-varying covariates (BW, etc.)
+   sim <- rxSolve(mod, params = sub_df, events = ev)          # split tables
+   # or merge into one table -- REQUIRED for time-varying covariates:
+   evall <- as.data.frame(ev) |> dplyr::left_join(sub_df, by = "id")
+   sim   <- rxSolve(mod, events = evall)
+   ```
 9. **Reproducibility.** Set both `set.seed(...)` *and* `rxode2::rxSetSeed(...)` — they cover R-level and rxode2 internal RNG respectively.
 10. **Population CIs.** Summarize a multi-subject sim with `confint(sim, "C", level = 0.95) |> plot()` — name any solved variable (`"ipred"` only exists if the model has a residual-error block). rxode2 warns below ~2500 replicates that the bands aren't trustworthy, so size `nSub`/`nStud` accordingly.
 
@@ -86,6 +96,10 @@ et() |> et(amt = 100, dur = 10, cmt = "central") |> et(0:24)
 # Multi-subject
 et() |> et(amt = 100, cmt = "depot") |> et(0:24) |> et(id = 1:50)
 
+# Multi-endpoint: one sampling pass PER endpoint, each naming its endpoint in cmt.
+# A plain grid errors with "'dvid'->'cmt' or 'cmt' on observation record ...".
+et() |> et(amt = 100, cmt = "depot") |> et(0:24, cmt = "cp") |> et(0:24, cmt = "effect")
+
 # Per-subject dosing (e.g. weight-based) — loop and append
 ev <- et()
 for (i in seq_len(nSub)) {
@@ -109,7 +123,7 @@ The skill is "done" only when the model has been **executed and inspected**, not
 
 | Symptom | Likely cause |
 |---|---|
-| `compartment 'X' not found` | `cmt=` in event table doesn't match a `d/dt(X)` |
+| `compartment 'X' not found` | `cmt=` in event table doesn't match a `d/dt(X)`. Note this surfaces at **solve** time, not compile time — a misspelled compartment compiles fine |
 | `parameter 'X' not found` | Symbol in `model({})` not in `ini({})`, not a compartment, not in `params=`, not a covariate column |
 | Compilation fails | Syntax error in `model({})`; surface the rxode2 error message |
 | `non-finite values` / max steps | Division by zero (zero volume?), discontinuous input, or stiff system — try `method = "lsoda"` explicitly |
