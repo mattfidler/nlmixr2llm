@@ -49,11 +49,11 @@ The returned object **is** an rxode2 UI, so anything that works on an rxode2 mod
    - `$etaData` — per-ID empirical Bayes ETAs (great for resampling-based sims)
    - `$ini` — parameter table (THETA + variability), tidy data.frame form
    - `$props$pop` — names of population (THETA) parameters
-   - `$thetaMat` — variance/covariance of fixed effects (for uncertainty sims)
+   - `$thetaMat` — NONMEM's full `$COV` matrix (thetas, sigma, omega) for uncertainty sims
    - `$predData`, `$ipredData` — NONMEM PRED/IPRED
    - `$ipredCompare`, `$predCompare`, `$iwresCompare` — rxode2-vs-NONMEM diffs
 6. **Qualification first.** Before doing *anything* downstream (sim, VPC, reporting), call `plot(mod)` (and `plot(mod, page=1, log="y")` for log-scale) and check `$ipredCompare` / `$predCompare`. If rxode2 and NONMEM disagree on IPRED, the translation has a problem and downstream results are not trustworthy.
-7. **Simulating new dosing.** Build a fresh `et()` event table and call `rxSolve(mod, ev)` — same pattern as any rxode2 model. Use `thetaMat=` from the converted object to propagate parameter uncertainty.
+7. **Simulating new dosing.** Build a fresh `et()` event table and call `rxSolve(mod, ev)` — same pattern as any rxode2 model. For parameter uncertainty just add `nStud=`: the converted model already carries NONMEM's covariance (`$thetaMat`), plus `dfSub` (subjects) and `dfObs` (observations) in its metadata, so `rxSolve(mod, ev, nStud = 100, nSub = 50)` draws thetas from the covariance step and omega/sigma from inverse Wishart distributions. `omegaSeparation = "tnpri"` draws the omega entries that have a nonzero `$COV` variance jointly with the thetas instead (see the rxode2 skill). Check `s$omegaList` to confirm what was drawn.
 8. **Resampling fitted subjects** (preferred over re-drawing from `omega` when you want to honor post-hoc ETAs):
 
    ```r
@@ -91,11 +91,12 @@ If any of these are missing, expect an error or a partially populated object —
 
 The skill is "done" only when the converted model has been **executed and qualified**, not just loaded:
 
-1. Run `nonmem2rx(..., validate = TRUE)` and confirm the object prints without warnings.
-2. Call `plot(mod)` and inspect `mod$ipredCompare`. The IPRED diff should be ~0 to working precision.
-3. *Then* run whatever the user actually asked for — new-dose sim, VPC, augPred, etc.
-4. Set `set.seed()` *and* `rxode2::rxSetSeed()` if the result needs to be reproducible across runs.
-5. Report qualification status alongside results.
+1. Read the control stream first. Note the ADVAN, `$PRIOR`, `$MIX`, custom `$PRED`, and algebra in `$ERROR`, which are the usual translation pain points. Confirm the listing, `.xml`, `.phi`, and dataset exist.
+2. Run `nonmem2rx(..., validate = TRUE)` and confirm the object prints without warnings.
+3. Call `plot(mod)` and inspect `mod$ipredCompare`. The IPRED diff should be ~0 to working precision.
+4. *Then* run whatever the user actually asked for — new-dose sim, VPC, augPred, etc.
+5. Set `set.seed()` *and* `rxode2::rxSetSeed()` if the result needs to be reproducible across runs.
+6. Report qualification status alongside results.
 
 ## Debugging quick reference
 
@@ -124,4 +125,4 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 ## Relationship to babelmixr2
 
-`babelmixr2` uses `nonmem2rx` to read NONMEM results back when you fit a model with `est = "nonmem"`. If a babelmixr2 NONMEM fit looks wrong, the translation problem is usually in nonmem2rx — debug it by loading the same `.ctl` directly with `nonmem2rx()` and inspecting `$ipredCompare`.
+`babelmixr2` (`est = "nonmem"`) reads NONMEM's output itself and combines it with the nlmixr2 model it already has; it does not call `nonmem2rx`. That makes `nonmem2rx` a useful independent second path: if a babelmixr2 NONMEM fit looks wrong, load the same run with `nonmem2rx()`, check `$ipredCompare`, and promote it with `babelmixr2::as.nlmixr2()` to compare.
