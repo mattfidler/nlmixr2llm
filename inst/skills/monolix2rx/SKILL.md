@@ -83,7 +83,7 @@ The skill is "done" only when the converted model has been **executed and qualif
 - Don't treat the result from `monolix2rx()` as an nlmixr2 fit — it's an rxode2 model
 - Treat the result from `babelmixr2::as.nlmixr2()` as a nlmixr2 fit.
 
-## In-repo references
+## References (in the monolix2rx source repo, github.com/nlmixr2/monolix2rx)
 
 - `vignettes/articles/convert-nlmixr2.Rmd` — promoting to nlmixr2 fit-like
 - `vignettes/articles/rxode2-validate.Rmd` — qualification against Monolix
@@ -92,4 +92,11 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 ## Relationship to babelmixr2
 
-`babelmixr2`'s Monolix backend (`est = "monolix"`) writes the model to a project, runs Monolix, and reads the outputs (reusing monolix2rx's project parser) to build an nlmixr2 fit; it does not re-translate the model with `monolix2rx()`. `babelmixr2::as.nlmixr2()` converts a `monolix2rx` model to an nlmixr2 fit. If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` directly with `monolix2rx()`: it is an independent path for reading a Monolix run into rxode2 and nlmixr2.
+`babelmixr2`'s Monolix backend (`est = "monolix"`) writes the model out, runs Monolix, and reads the results folder to build an nlmixr2 fit. It reuses `monolix2rx`'s project parser for that, but it does **not** run the full `monolix2rx()` model translation, because it already knows the original nlmixr2 model. `babelmixr2::as.nlmixr2()` is what converts a `monolix2rx()` model into an nlmixr2 fit.
+
+If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` with `monolix2rx()`. That is a different code path into the same run, so it both works around the failure and localizes it:
+
+- **The independent conversion qualifies:** monolix2rx can represent the model and read the results, so the problem is in babelmixr2's result reading.
+- **It fails to qualify too:** that is a *translation* limitation (custom distributions, complex transforms, non-standard IOV, BLQ handling), not evidence that Monolix produced bad output. Inspect the generated rxode2 model body.
+
+Whether the Monolix run itself is sound is a separate question, answered by `summary.txt` and the convergence output rather than the qualification diff.

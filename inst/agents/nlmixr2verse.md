@@ -12,7 +12,7 @@ This file is the **orchestration layer**: the ecosystem map, the shared conventi
 
 Five skills ship with this agent, one per package: `rxode2`, `nlmixr2`, `babelmixr2`, `nonmem2rx`, `monolix2rx`. Each has the full API surface, runnable examples, debugging tables, and vignette references.
 
-**Load the matching skill with the `Skill` tool before real work in that package**: writing or editing a model, event table, or fit call; debugging an error; or using an API detail (slot names, control arguments, the full list of estimation methods) that the cards below don't spell out. A task that spans packages needs each relevant skill. Skip the load only when a card answers the question outright. In tools without a `Skill` tool (a combined `AGENTS.md` for Codex or Positron), the installed skills appear later in the same file as "Skill: <package>" sections; read the relevant section instead. If a skill is unavailable (for example, when this file was installed without them), say so, work from the cards, and flag missing detail instead of guessing.
+**Load the matching skill with the `Skill` tool before real work in that package** (writing a model, event table, or fit call; debugging an error; or any API detail the cards don't spell out), one per package the task touches. Skip it only when a card answers the question outright. Without a `Skill` tool (a combined `AGENTS.md` for Codex or Positron), read the file's "Skill: <package>" sections instead. If a skill is missing, say so, work from the cards, and flag the gap rather than guessing.
 
 # The ecosystem at a glance
 
@@ -78,34 +78,17 @@ A complete simulation has three pieces: **model** (`ini({})` + `model({})`), **e
 - Instantiate before solving (`mod <- mod()`); dose by **compartment name** (`et(amt = 100, cmt = "depot")`). Bad compartment names error at solve time, not compile time.
 - One-off values: `params = c(CL = 20)`; per-subject values: a `params=` data frame keyed by `id`; time-varying covariates: merge them into the event table. To keep a change with the model, pipe it: `mod |> ini(CL = 20)`.
 - Population sims: `nSub` subjects, `nStud` studies. Summaries: `confint(sim, "var") |> plot()`.
+- **ODE → `linCmt()` conversion** (`useLinCmt`) renames compartments to `depot`/`central`/`peripheral1`/`peripheral2`. It is meant to be off by default, but function-style models still convert unless you pass `useLinCmt = FALSE` ([rxode2#1389](https://github.com/nlmixr2/rxode2/issues/1389)). Name the central compartment `central` so names agree either way.
 
 **Priors** (`lotri` >= 1.0.5): `prior(tka) ~ dnorm(mean, sd)`; `tcl + tv ~ c(var, cov, var)` (thetas on the left make a joint prior, not an OMEGA block; `ini({})` only); `prior(eta.cl, eta.v) ~ invWishart(df)`; `om.eta.cl ~ 0.01` (normal prior on the omega value). Piping `ini(tka ~ 0.01)` changes the estimate; it does not add a prior.
 
-**Simulating with parameter uncertainty.** Each of `nStud` studies draws its own thetas, omega, and sigma, then simulates `nSub` subjects:
+**Simulating with parameter uncertainty.** Each of `nStud` studies draws its own thetas, omega, and sigma, then simulates `nSub` subjects. The draws come from `ini()` priors (`rxSolve(mod, ev, nStud = 100)`), from explicit `thetaMat=`/`dfSub=`/`dfObs=`, or automatically from an nlmixr2 fit or a nonmem2rx/monolix2rx import (`rxSolve(fit, ev, nStud = 100)`).
 
-| Source | Call |
-|---|---|
-| `ini()` priors | `rxSolve(mod, ev, nStud = 100, nSub = 50)` |
-| Explicit | `rxSolve(mod, ev, nStud = 100, thetaMat = cov, dfSub = nID, dfObs = nObs)` (thetas ~ MVN; omega/sigma ~ inverse Wishart; a call-site `thetaMat` overrides `ini()` priors) |
-| nlmixr2 fit, nonmem2rx or monolix2rx import | `rxSolve(fit, ev, nStud = 100, nSub = 50)` (covariance and degrees of freedom are filled in automatically) |
+- `usePrior = FALSE` ignores priors; a call-site `thetaMat` overrides them. **A fit estimated with priors** needs `usePrior = FALSE`, because a prior mean must equal the current estimate.
+- `omegaSeparation = "tnpri"` draws omega jointly with the thetas, but still takes off-diagonals from `dfSub` ([rxode2#1388](https://github.com/nlmixr2/rxode2/issues/1388)); pass `dfSub = 0` for a pure tnpri draw.
+- Only normal, `multiNormal`, `invWishart`, and `om.*` priors can be simulated from.
 
-- `usePrior = FALSE` ignores priors. **A fit estimated with priors** needs it, because its estimates no longer equal the prior means and a prior mean must equal the current estimate.
-- `omegaSeparation = "tnpri"` draws omega entries jointly with the thetas from a full covariance. It currently still takes the off-diagonals from `dfSub` ([rxode2#1388](https://github.com/nlmixr2/rxode2/issues/1388)); pass `dfSub = 0` for a pure tnpri draw.
-- Only normal, `multiNormal`, `invWishart`, and `om.*` priors can be simulated from; a model with `dcauchy()` (etc.) priors needs `usePrior = FALSE`.
-
-**Adaptive dosing.** Doses that depend on the simulated trajectory go in `model({})` via `bolus()`, `infuse()`, `infuseDur()`, `reset()`, `replace()`, `multiply()`, `phantom()`, `obs()`, `evid_()` (rxode2 >= 5.1.7). Pipe the protocol onto the model or fit so the fitted model stays unchanged:
-
-```r
-tdm <- fit |>
-  model({
-    rescueAmt <- rescue                   # dose amount must be a plain symbol
-    if (t > 0 && t %% 24 == 0 && cp < target) bolus(rescueAmt, cmt = depot)
-  }, append = TRUE, auto = FALSE) |>
-  ini(target <- 3, rescue <- 160)
-sim <- rxSolve(tdm, ev, nSub = 100, maxExtra = 500)
-```
-
-Decisions run only at times the solver visits (put them in `et()`, or pin them with `mtime(check48) <- 48`). Anchor standing conditions to a visit. Keep protocol memory in sticky variables (`if (is.na(level)) level <- 1`). Set `maxExtra`.
+**Adaptive dosing.** Doses that depend on the simulated trajectory go in `model({})` via `bolus()`, `infuse()`, `infuseDur()`, `reset()`, `replace()`, `multiply()`, `phantom()`, `obs()`, `evid_()` (rxode2 >= 5.1.7). Pipe the rule onto the model or fit so the fitted model stays unchanged: `fit |> model({ amt1 <- rescue; if (t > 0 && t %% 24 == 0 && cp < target) bolus(amt1, cmt = depot) }, append = TRUE, auto = FALSE) |> ini(target <- 3, rescue <- 160)`. Dose amounts must be plain symbols. Decisions run only at times the solver visits (`et()` times or `mtime(check48) <- 48`); anchor standing conditions to a visit; keep protocol memory in sticky variables; set `maxExtra`.
 
 ## nlmixr2 — fit models
 
@@ -113,7 +96,7 @@ Decisions run only at times the solver visits (put them in `et()`, or pin them w
 
 - **The model decides the family.** Models with at least one eta need a mixed-effects method; models with none need a pooled one. The wrong kind errors ("needs to be a mixed effect model" / "can only have population estimates, try 'focei'"). `nlmixr2AllEstType()` lists every method in the session by category.
 - **Quick pick:** `saem` for rough initial estimates or complex models; `focei` for reasonable estimates or generalized likelihoods; a pooled optimizer when there are no etas.
-- **Mixed effects:** `focei`, `foce`, `focep`, `fo`, `foi`, `nlme`, `laplace`, `agq`, `imp`, `impmap`, `saem`, `qrpem`, `npag`, `npb`, `emvi`, `fbvi`, `vae`, `posthoc`. Variants: an `m`/`i` prefix is mu-referenced regression/IRLS (FOCEi family and `npag`/`npb`), an `f` suffix is the fast analytic gradient (`mfocei`, `ifoceif`, `mnpag`, ...). Add-ons: babelmixr2 `nlmer`/`saemix`; nlmixr2bayes `nuts`/`advi`/`pathfinder` (every theta and residual parameter needs a `prior()`).
+- **Mixed effects:** `focei`, `foce`, `focep`, `fo`, `foi`, `nlme`, `laplace`, `agq`, `imp`, `impmap`, `saem`, `qrpem`, `npag`, `npb`, `emvi`, `fbvi`, `vae`, `posthoc`. Variants: an `m`/`i` prefix is mu-referenced regression/IRLS (`i` is *not* interaction; FOCEi family and `npag`/`npb`), an `f` suffix is the fast analytic gradient (`mfocei`, `ifoceif`, `mnpag`, ...). The `foceiControl()` `outerOpt` default is `bobyqa`; under `fast = TRUE` a defaulted one becomes `lbfgsb3c`. Add-ons: babelmixr2 `nlmer`/`saemix`; nlmixr2bayes `nuts`/`advi`/`pathfinder` (every theta and residual parameter needs a `prior()`).
 - **Pooled:** `focei`, `nlm`, `nlminb`, `n1qn1`, `trust`, `lbfgsb3c`, `bobyqa`, `newuoa`, `uobyqa`, `optim` (and its `neldermead`/`bfgs`/`cg`/`lbfgsb`/`sann`/`brent` shortcuts), `nls`; babelmixr2 `fmeMcmc`/`pseudoOptim`.
 - **Priors are never silently ignored.** The FOCEi family (every variant, including `fo`/`foi`), `laplace`/`agq`, `imp`/`impmap`/`qrpem`, and nlmixr2bayes use them; `posthoc` evaluates them; every other method refuses the model.
 - **SAEM reports SEs** (`covMethod = "sa"`) and an OFV. `fit$cov` includes omega and residual parameters; switch covariance without refitting: `setCov(fit, "analytic" | "sa" | "imp" | "r,s")`.
@@ -134,27 +117,17 @@ One model, many engines: `nlmixr(model, data, est = "nonmem", nonmemControl(mode
 Both follow **convert → qualify → use**, and qualification is not optional.
 
 - Read the source first: the control stream (ADVAN, `$PRIOR`, `$MIX`, custom `$PRED`, algebra in `$ERROR`) or the `.mlxtran` (custom distributions, IOV, BLQ, `lib:` models).
-- `nonmem2rx(ctlOrLst, validate = TRUE)` runs the rxode2-vs-NONMEM qualification (`$ipredCompare`, `$predCompare`, `plot(mod)`). The import carries NONMEM's `$COV` and degrees of freedom (monolix2rx imports do too), so `nStud=` uncertainty works directly.
+- `nonmem2rx(ctlOrLst, validate = TRUE)` runs the rxode2-vs-NONMEM qualification (`$ipredCompare`, `$predCompare`, `plot(mod)`) and populates `$etaData`. Read slots with `$`: computed ones (`$ini`, `$thetaMat`, `$props`) return `NULL` under `[[ ]]`. The import carries NONMEM's `$COV` and degrees of freedom (monolix2rx imports do too), so `nStud=` uncertainty works directly.
 - `monolix2rx(mlxtranFile)` needs the `.mlxtran` **and** its results folder; with only the `.mlxtran` you get a structural model with empty `$theta`/`$omega`. Monolix `lib:` models need `options(monolix2rx.library=)` or `lixoftConnectors`.
 - Both return an **rxode2 model, not an nlmixr2 fit**; `babelmixr2::as.nlmixr2(mod)` promotes it to one.
 - rxode2 PRED/IPRED must match the engine's to working precision. A nonzero diff means an unsupported construct: inspect the generated model and patch it; never proceed silently.
 
 # Staying current (self-check)
 
-This content ships via the `nlmixr2llm` R package, which installs **independent
-copies** per tool (Claude Code, Codex/`AGENTS.md`, Positron). Upgrading the
-package does *not* refresh them, so your guidance may lag what it now ships.
-
-Once per session — on your first nlmixr2 task, not every turn — check for drift:
+This content is installed by the `nlmixr2llm` R package as **independent copies** per tool (Claude Code, Codex/`AGENTS.md`, Positron), and upgrading the package does not refresh them. Once per session, on your first nlmixr2 task, run:
 
 ```bash
 Rscript -e 'if (requireNamespace("nlmixr2llm", quietly = TRUE)) nlmixr2llm::nlmixr2llm_status()'
 ```
 
-If it reports files out of date (or not installed), tell the user briefly and
-pass along the exact refresh command it prints — e.g.
-`install_claude_code(..., overwrite = TRUE)`, `install_codex(..., mode =
-"write")`, `install_positron(..., overwrite = TRUE)`. Refreshing overwrites
-local edits to those files. If all is current, or the package/Rscript is
-unavailable, say nothing. Never block or delay the user's task on this check,
-and don't repeat it in a session.
+If it reports files out of date or not installed, tell the user briefly and pass along the refresh command it prints (refreshing overwrites local edits). Otherwise, or if R/the package is unavailable, say nothing. Never block the user's task on this, and don't repeat it in a session.

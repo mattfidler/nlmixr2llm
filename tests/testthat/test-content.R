@@ -344,3 +344,13 @@ test_that("install_positron instructions style prunes obsolete files", {
   expect_false(file.exists(legacy))
   expect_true(file.exists(file.path(dir, "rxode2.instructions.md")))
 })
+
+test_that("the agent plus any single skill fits Codex's 32 KiB AGENTS.md cap", {
+  for (pkg in list_skills()) {
+    tmp <- withr::local_tempdir()
+    path <- expect_no_warning(
+      install_codex(scope = "project", path = tmp, packages = pkg)
+    )
+    expect_lte(file.size(path), 32 * 1024, label = paste("agent +", pkg))
+  }
+})

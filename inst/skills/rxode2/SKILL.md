@@ -30,9 +30,9 @@ mod <- function() {
     V  <- 40.2
   })
   model({
-    C  <- centr / V
+    C  <- central / V
     d/dt(depot) <- -KA * depot
-    d/dt(centr) <-  KA * depot - (CL/V) * centr
+    d/dt(central) <-  KA * depot - (CL/V) * central
   })
 }
 mod <- mod()                              # instantiate the UI object
@@ -50,16 +50,21 @@ Always run the example (or its adapted form) and confirm it compiles and solves 
 
 ## Authoring rules
 
-1. **Model structure.** Use the function-style UI: an R function returning `ini({}) / model({})`. Call the function once (`mod <- mod()`) to get the UI object that `rxSolve` accepts.
+1. **Model structure.** Use the function-style UI: an R function returning `ini({}) / model({})`. Call the function once (`mod <- mod()`) to get the UI object that `rxSolve` accepts; `rxode2(mod)` does the same thing.
+
+   **ODE → `linCmt()` conversion (`useLinCmt`).** rxode2 can replace a mass-balanced linear ODE system with the equivalent analytic `linCmt()` solution at solve time (`odeToLin()`; `linToOde()` is the inverse). It is faster, but `linCmt()` uses canonical compartment names (`depot`, `central`, `peripheral1`, `peripheral2`), so a `d/dt(centr)` model then returns a solved column called `central` while `mod$state` still says `centr`. It is meant to be **off by default** (`getOption("rxode2.useLinCmt", FALSE)`), but that currently applies only to classic `rxode2({})` models: function-style models convert unless you pass `useLinCmt = FALSE`, and ignore the option ([rxode2#1389](https://github.com/nlmixr2/rxode2/issues/1389)).
+   - Pass `useLinCmt = FALSE` to keep the ODE form and your names, or `TRUE` to force the conversion.
+   - Name the central compartment `central` (and peripherals `peripheral1`/`peripheral2`) so the names agree either way.
+   - A model that isn't mass-balanced (e.g. an effect compartment with its own turnover) is not converted. Neither is a model whose event data doses a compartment the conversion would rename away; it silently falls back to the ODE path.
 2. **Compartments come from `d/dt(name)`.** The compartment is named by what's inside `d/dt(...)`. Reference it elsewhere (events, initial conditions) by that exact name.
 3. **Initial conditions** go inside `model({})` as `name(0) <- value`, *not* in `ini({})`.
-4. **Algebraic definitions** (e.g. `C <- centr/V`) must appear before the ODEs that use them.
+4. **Algebraic definitions** (e.g. `C <- central/V`) must appear before the ODEs that use them.
 5. **Parameters.** Fixed effects in `ini({})` use `<-`. Random effects (between-subject variability) use `~` with a variance, e.g. `eta.cl ~ 0.1`. Residual error similarly: `add.err <- 0.1` then in `model` use `cp ~ add(add.err)`.
 6. **Dose by compartment name** in `et()` (`cmt = "depot"`) — clearer than NONMEM-style integer indices and rxode2 supports it natively.
 7. **Override parameters at solve time** via `params = c(CL = 20)` rather than editing `ini({})` for one-off scenarios. To keep the change with the model, pipe it: `mod |> ini(CL = 20)` returns a modified copy.
 8. **Population sims.** Use `nSub` / `nStud` on `rxSolve`, supply `omega=` / `sigma=` / `thetaMat=` for variability and uncertainty propagation (see *Simulating with parameter uncertainty*). Use `cores=` for parallelism. For per-subject parameters or covariates, pass a `params=` data.frame keyed by `id` alongside an `events=` event table — or merge them into a single table (required if you have time-varying covariates).
 9. **Reproducibility.** Set both `set.seed(...)` *and* `rxode2::rxSetSeed(...)` — they cover R-level and rxode2 internal RNG respectively.
-10. **Population CIs.** Summarize a multi-subject sim with `confint(sim, "ipred", level = 0.95) |> plot()` (or any solved variable name) to get a median + ribbon plot.
+10. **Population CIs.** Summarize a multi-subject sim with `confint(sim, "C", level = 0.95) |> plot()` to get a median + ribbon plot. Name any solved variable; `"ipred"`/`"sim"` only exist when the model has a residual-error line. rxode2 warns below ~2500 replicates that the bands aren't trustworthy, so size `nSub`/`nStud` accordingly.
 11. **Pipe; don't retype.** `mod |> model(...)` and `mod |> ini(...)` (on a model *or* an nlmixr2 fit) return a modified copy. Use them to add a covariate, change a value, or bolt on a dosing protocol while the original model stays exactly as it was.
 
 ## Event-table cheatsheet
@@ -75,10 +80,14 @@ et() |> et(amt = 100, addl = 9, ii = 12, cmt = "depot") |> et(0:120)
 et() |> et(amt = 100, ii = 12, ss = 1, cmt = "depot") |> et(0:24)
 
 # Infusion (rate-based)
-et() |> et(amt = 100, rate = 10, cmt = "centr") |> et(0:24)
+et() |> et(amt = 100, rate = 10, cmt = "central") |> et(0:24)
 
 # Infusion (duration-based)
-et() |> et(amt = 100, dur = 10, cmt = "centr") |> et(0:24)
+et() |> et(amt = 100, dur = 10, cmt = "central") |> et(0:24)
+
+# Multi-endpoint: one sampling pass PER endpoint, each naming its endpoint in cmt.
+# A plain grid errors with "'dvid'->'cmt' or 'cmt' on observation record ...".
+et() |> et(amt = 100, cmt = "depot") |> et(0:24, cmt = "cp") |> et(0:24, cmt = "effect")
 
 # Multi-subject
 et() |> et(amt = 100, cmt = "depot") |> et(0:24) |> et(id = 1:50)
@@ -242,7 +251,8 @@ The skill is "done" only when the model has been **executed and inspected**, not
 
 | Symptom | Likely cause |
 |---|---|
-| `compartment 'X' not found` | `cmt=` in event table doesn't match a `d/dt(X)` |
+| `compartment 'X' not found` | `cmt=` in event table doesn't match a `d/dt(X)`. This surfaces at **solve** time; a misspelled compartment compiles fine |
+| Output has `central` but the model says `centr` | the ODE → `linCmt()` conversion ran (see rule 1); pass `useLinCmt = FALSE` or name the compartment `central` |
 | `parameter 'X' not found` | Symbol in `model({})` not in `ini({})`, not a compartment, not in `params=`, not a covariate column |
 | Compilation fails | Syntax error in `model({})`; surface the rxode2 error message |
 | `non-finite values` / max steps | Division by zero (zero volume?), discontinuous input, or stiff system — try `method = "lsoda"` explicitly |
@@ -251,12 +261,12 @@ The skill is "done" only when the model has been **executed and inspected**, not
 
 ## What NOT to do
 
-- Don't invent rxode2 syntax. If unsure, check `inst/syntax-functions.csv` or the vignettes in `vignettes/` and `vignettes/articles/` in this repo.
+- Don't invent rxode2 syntax. If unsure, check `inst/syntax-functions.csv` or the vignettes under `vignettes/` in the rxode2 source repo (github.com/nlmixr2/rxode2).
 - Don't hand the user pseudocode. Always produce a complete, runnable script with `library(rxode2)`.
 - Don't skip the run step. A model that "looks right" but never compiled is not delivered.
 - Don't overwrite the user's existing model parameters silently — if you change `ini({})` values, call it out.
 
-## In-repo references
+## References (in the rxode2 source repo, github.com/nlmixr2/rxode2)
 
 - `vignettes/rxode2-intro.Rmd` — canonical intro example
 - `vignettes/rxode2-syntax.Rmd` — model language reference

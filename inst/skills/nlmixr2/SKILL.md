@@ -91,14 +91,18 @@ Always run the example (or its adapted form) and confirm the fit converges and p
    | Integral approx. | `"laplace"` | Laplace (= AGQ with one node) |
    | | `"agq"` | Adaptive Gauss–Hermite quadrature (`nAGQ`); only for models with few etas |
    | | `"imp"`, `"impmap"` | Importance-sampling EM (NONMEM `IMP`); `impmap` centers the proposal at the MAP; covariance `"imp"` |
-   | Stochastic EM | `"saem"` | Robust default for most popPK/PD; tolerant of poor initials. Reports SEs (`covMethod = "sa"`) and a -2LL by Gaussian quadrature |
+   | Stochastic EM | `"saem"` | Robust default for most popPK/PD; tolerant of poor initials. Reports SEs (`covMethod = "sa"`). The objective function isn't computed during the fit: the first access to `fit$objf`/`AIC(fit)` triggers a Gaussian-quadrature -2LL, and `addCwres()` adds the FOCEi objective plus CWRES |
    | | `"qrpem"` | Quasi-random parametric EM (Sobol samples + SIR M-step) |
    | Nonparametric | `"npag"`, `"npb"` | Adaptive grid / nonparametric Bayes for multimodal eta distributions; support points in `fit$npagSupport` |
    | Variational / ML | `"emvi"`, `"fbvi"` | Variational inference, EM-optimized or full-Bayes with flat priors; covariance `"vi"` |
-   | | `"vae"` | Variational autoencoder (LSTM encoder, ELBO) with simultaneous covariate selection |
+   | | `"vae"` | Variational autoencoder (LSTM encoder, ELBO) with simultaneous covariate selection (`vaeControl(covSelectMethod = )`) |
    | Empirical Bayes | `"posthoc"` | Freezes THETA/OMEGA and computes ETAs (MAP) for the given data; useful for new individuals |
 
-   *Variants.* The FOCEi-family names (`foce*`, `laplace`, `agq`) take an `m` prefix (mu-referenced closed-form regression, `muModel = "lin"`), an `i` prefix (mu-referenced IRLS, `muModel = "irls"`), and an `f` suffix (analytic fast outer gradient, `fast = TRUE`). `flaplace`/`fagq` also use the full conditional Hessian (Gaussian endpoints only). Examples: `mfocei`, `ifoceif`, `mlaplace`, `iagqf`. The nonparametric methods take the same prefixes (`mnpag`, `inpag`, `mnpb`, `inpb`). Start with the base method and switch to a variant for speed.
+   *Variants.* The FOCEi-family names (`foce*`, `laplace`, `agq`) take an `m` prefix (mu-referenced closed-form regression, `muModel = "lin"`), an `i` prefix (mu-referenced IRLS, `muModel = "irls"`), and an `f` suffix (analytic fast outer gradient, `fast = TRUE`). `flaplace`/`fagq` also use the full conditional Hessian (Gaussian endpoints only). Examples: `mfocei`, `ifoceif`, `mlaplace`, `iagqf`. The nonparametric methods take the same prefixes (`mnpag`, `inpag`, `mnpb`, `inpb`). **The `i` prefix means IRLS, not interaction.**
+
+   *Outer optimizer.* `foceiControl(outerOpt = )` defaults to **`bobyqa`**. Under `fast = TRUE` (and every `*f` method) a defaulted `outerOpt` switches to the gradient-based `lbfgsb3c`; an explicit choice is kept. Alternatives include `nlminb`, `lbfgsb3c`, `L-BFGS-B`, `uobyqa`, and `newuoa`.
+
+   *Mixtures* via `mix()` are supported for `focei`, `foce`, `foi`, and `fo`. To enumerate every `est=` value, use `nlmixr2AllEstType()` or `methods("nlmixr2Est")` rather than guessing. Start with the base method and switch to a variant for speed.
 
    *From other packages:* babelmixr2 adds `"nlmer"` (`lme4::nlmer`), `"saemix"`, `"nonmem"`, `"monolix"`, and `"pknca"`; nlmixr2bayes adds `"nuts"` (alias `"stan"`), `"advi"`, and `"pathfinder"`, which run Stan and **require a `prior()` on every theta and residual parameter** (OMEGA blocks get a default; see *Priors* below).
 
@@ -210,7 +214,17 @@ model({
 })
 ```
 
-Use  `| endpoint` (do NOT use `dvid("endpoint")`) to bind each error line to a row category in the dataset's `DVID` column.
+Bind each error line to a row category in the dataset's `DVID` column with a **bare endpoint name** after `|`. Do **not** write `| dvid("endpoint")`: that is a hard parse error (`the condition 'dvid("cp")' must be a simple name`), not a deprecation warning. Every residual-error parameter must be declared in `ini({})` like any THETA.
+
+**Simulating a multi-endpoint model:** every observation record must say which endpoint it belongs to, so a plain sampling grid fails with `'dvid'->'cmt' or 'cmt' on observation record or on a undefined compartment`. Add one sampling pass per endpoint:
+
+```r
+ev <- et(amt = 320, cmt = "depot") |>
+  et(seq(0, 48, by = 0.5), cmt = "cp") |>
+  et(seq(0, 48, by = 0.5), cmt = "effect")
+```
+
+A model that fits fine can still fail here; it is an event-table requirement only.
 
 ## Debugging quick reference
 
@@ -218,10 +232,10 @@ Use  `| endpoint` (do NOT use `dvid("endpoint")`) to bind each error line to a r
 |---|---|
 | `parameter not found` at compile | symbol used in `model({})` not declared in `ini({})`, not a compartment, not in the data |
 | SAEM runs forever / huge OFV swings | bad initial estimates, especially on the log scale; sanity-check `exp(tka)` etc. |
-| Model with priors errors on `est=` | that method cannot use priors; use a FOCEi-family, `imp`/`impmap`/`qrpem`, or nlmixr2bayes method |
+| Model with priors errors on `est=` | that method cannot use priors; use a FOCEi-family, `laplace`/`agq`, `imp`/`impmap`/`qrpem`, or nlmixr2bayes method |
 | "needs to be a mixed effect model" / "can only have population estimates" | wrong family for the model; see the pooled vs mixed-effects tables |
 | Converged, but a parameter sits at its boundary | it isn't really estimated; rethink the model (fix it, drop it, or reparameterize) |
-| FOCEi fails with Hessian errors | over-parameterized OMEGA, near-zero variance estimate, or model identifiability issue — try fewer ETAs or fix small variances, or try other outerOpt optimizations like `foceiControl(outerOpt="bobyqa")` for instance |
+| FOCEi fails with Hessian errors | over-parameterized OMEGA, near-zero variance estimate, or identifiability issue — use fewer ETAs, fix small variances, or switch the outer optimizer away from the `bobyqa` default (e.g. `foceiControl(outerOpt = "nlminb")`, or `fast = TRUE` for `lbfgsb3c`) |
 | `vpcPlot` empty / wrong | residual error not specified, or endpoint names after `|` don't match the data's `DVID` values |
 | `augPred` flat | dosing into wrong compartment, or `cmt=` in data doesn't match `d/dt(name)` |
 | Output looks fine but `$parFixed` SEs are NA | covariance step failed or was skipped; try `setCov(fit, "analytic")` or `setCov(fit, "sa")` instead of refitting |
@@ -233,7 +247,7 @@ Use  `| endpoint` (do NOT use `dvid("endpoint")`) to bind each error line to a r
 - Don't skip the fit step. A model that "looks right" but never converged is not delivered.
 - Don't rely on default initial estimates — set them on the right scale, and call `label()` on each THETA so the printout is readable.
 
-## In-repo references
+## References (in the nlmixr2 source repo, github.com/nlmixr2/nlmixr2)
 
 - `vignettes/running_nlmixr.Rmd` — canonical intro
 - `vignettes/multiple-endpoints.Rmd` — multi-endpoint specification

@@ -130,7 +130,7 @@ install_codex(scope = "project", path = ".",
 install_codex(scope = "user", mode = "append")
 ```
 
-Codex enforces a default 32 KiB cap on combined `AGENTS.md` content (`project_doc_max_bytes` in `~/.codex/config.toml`). The full corpus (~71 KiB) is larger than that. The combined `nlmixr2verse` agent is a compact orchestration layer (~14 KiB) and is always included whole when agents are requested, so `packages = ...` only subsets the skills. The agent plus any one skill fits under the default cap (~30 KiB):
+Codex enforces a default 32 KiB cap on combined `AGENTS.md` content (`project_doc_max_bytes` in `~/.codex/config.toml`). The full corpus (~78 KiB) is larger than that. The combined `nlmixr2verse` agent is a compact orchestration layer (~14 KiB) and is always included whole when agents are requested, so `packages = ...` only subsets the skills. The agent plus any one skill fits under the default cap (a package test enforces this):
 
 ```{r codex_subset, eval = FALSE}
 # The agent plus the skill for the package you use most
