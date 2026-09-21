@@ -35,7 +35,7 @@ import finished runs into rxode2/nlmixr2:
   babelmixr2::as.nlmixr2(mod) promotes either one to an nlmixr2 fit
 ```
 
-- babelmixr2 is the *forward* path. It reads the engine's results back itself and combines them with the model it already has; it does **not** call nonmem2rx/monolix2rx. If a babelmixr2 engine fit looks wrong, load the same engine output with `nonmem2rx()` / `monolix2rx()` as an independent second path, and compare.
+- babelmixr2 is the *forward* path. It reads the engine's output with nonmem2rx/monolix2rx's file readers and combines the results with the model it already has; it does **not** re-translate the model with `nonmem2rx()` / `monolix2rx()`. If a babelmixr2 engine fit looks wrong, loading the same run with `nonmem2rx()` / `monolix2rx()` gives a second path through the model translation to compare against.
 - Cross-cutting tasks: **simulation with uncertainty** and **adaptive dosing** are rxode2 work even when the model came from a fit or an import (load `rxode2` plus the skill for the model's source). **Choosing `est=`** and **priors for estimation** are nlmixr2 work.
 
 # Conventions shared across the ecosystem
@@ -86,7 +86,7 @@ A complete simulation has three pieces: **model** (`ini({})` + `model({})`), **e
 | Source | Call |
 |---|---|
 | `ini()` priors | `rxSolve(mod, ev, nStud = 100, nSub = 50)` |
-| Explicit | `rxSolve(mod, ev, nStud = 100, thetaMat = cov, dfSub = nID, dfObs = nObs)` (thetas ~ MVN; omega/sigma ~ inverse Wishart) |
+| Explicit | `rxSolve(mod, ev, nStud = 100, thetaMat = cov, dfSub = nID, dfObs = nObs)` (thetas ~ MVN; omega/sigma ~ inverse Wishart; a call-site `thetaMat` overrides `ini()` priors) |
 | nlmixr2 fit, nonmem2rx or monolix2rx import | `rxSolve(fit, ev, nStud = 100, nSub = 50)` (covariance and degrees of freedom are filled in automatically) |
 
 - `usePrior = FALSE` ignores priors. **A fit estimated with priors** needs it, because its estimates no longer equal the prior means and a prior mean must equal the current estimate.
@@ -113,9 +113,9 @@ Decisions run only at times the solver visits (put them in `et()`, or pin them w
 
 - **The model decides the family.** Models with at least one eta need a mixed-effects method; models with none need a pooled one. The wrong kind errors ("needs to be a mixed effect model" / "can only have population estimates, try 'focei'"). `nlmixr2AllEstType()` lists every method in the session by category.
 - **Quick pick:** `saem` for rough initial estimates or complex models; `focei` for reasonable estimates or generalized likelihoods; a pooled optimizer when there are no etas.
-- **Mixed effects:** `focei`, `foce`, `focep`, `fo`, `foi`, `nlme`, `laplace`, `agq`, `imp`, `impmap`, `saem`, `qrpem`, `npag`, `npb`, `emvi`, `fbvi`, `vae`, `posthoc`. Variants: an `m`/`i` prefix is mu-referenced regression/IRLS, an `f` suffix is the fast analytic gradient (`mfocei`, `ifoceif`, ...). Add-ons: babelmixr2 `nlmer`/`saemix`; nlmixr2bayes `nuts`/`advi`/`pathfinder` (every theta and residual parameter needs a `prior()`).
+- **Mixed effects:** `focei`, `foce`, `focep`, `fo`, `foi`, `nlme`, `laplace`, `agq`, `imp`, `impmap`, `saem`, `qrpem`, `npag`, `npb`, `emvi`, `fbvi`, `vae`, `posthoc`. Variants: an `m`/`i` prefix is mu-referenced regression/IRLS (FOCEi family and `npag`/`npb`), an `f` suffix is the fast analytic gradient (`mfocei`, `ifoceif`, `mnpag`, ...). Add-ons: babelmixr2 `nlmer`/`saemix`; nlmixr2bayes `nuts`/`advi`/`pathfinder` (every theta and residual parameter needs a `prior()`).
 - **Pooled:** `focei`, `nlm`, `nlminb`, `n1qn1`, `trust`, `lbfgsb3c`, `bobyqa`, `newuoa`, `uobyqa`, `optim` (and its `neldermead`/`bfgs`/`cg`/`lbfgsb`/`sann`/`brent` shortcuts), `nls`; babelmixr2 `fmeMcmc`/`pseudoOptim`.
-- **Priors are never silently ignored.** The FOCEi family (every variant), `laplace`/`agq`, `imp`/`impmap`/`qrpem`, and nlmixr2bayes use them; every other method refuses the model.
+- **Priors are never silently ignored.** The FOCEi family (every variant, including `fo`/`foi`), `laplace`/`agq`, `imp`/`impmap`/`qrpem`, and nlmixr2bayes use them; `posthoc` evaluates them; every other method refuses the model.
 - **SAEM reports SEs** (`covMethod = "sa"`) and an OFV. `fit$cov` includes omega and residual parameters; switch covariance without refitting: `setCov(fit, "analytic" | "sa" | "imp" | "r,s")`.
 - From a fit: `rxSolve(fit, ev, nSub=, nStud=)` simulates; `fit |> ini()` / `fit |> model()` start from the final estimates.
 - Not done until the fit has converged, the OFV is finite, no parameter is hugging a boundary, and at least one diagnostic (`augPred()`, `vpcPlot()`) has been inspected.

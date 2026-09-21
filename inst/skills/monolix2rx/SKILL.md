@@ -1,6 +1,6 @@
 ---
 name: monolix2rx
-description: Use this skill when the user wants to convert a Monolix project (`.mlxtran` + results folder) into an rxode2 / nlmixr2 model object for simulation, sharing, or qualification. Triggers include calls to `monolix2rx()` or `mlxtran()`, references to `.mlxtran` files, "translate this Monolix project", or babelmixr2's Monolix back-translation step.
+description: Use this skill when the user wants to convert a Monolix project (`.mlxtran` + results folder) into an rxode2 / nlmixr2 model object for simulation, sharing, or qualification. Triggers include calls to `monolix2rx()` or `mlxtran()`, references to `.mlxtran` files, "translate this Monolix project", or cross-checking a babelmixr2 Monolix fit by importing the same run independently.
 ---
 
 # monolix2rx — Monolix → rxode2 conversion
@@ -68,7 +68,7 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 | Symptom | Likely cause |
 |---|---|
-| `cannot find results folder` | `.mlxtran` was passed but the sibling results directory is missing or in a non-standard location |
+| `cannot find results folder` | `.mlxtran` was passed but the sibling results directory is missing or in a non-standard location — pass an absolute path or move the results next to the project |
 | Library reference fails (`lib:...txt` not found) | Monolix library not configured — set `options(monolix2rx.library=...)` or install `lixoftConnectors` |
 | `summary.txt` / `covarianceEstimatesLin.txt` not found | run was incomplete or covariance step skipped — re-run Monolix with the SE step enabled |
 | Parameters present but `$omega` empty | random-effects parsing hit a feature monolix2rx doesn't translate — check the model body |
@@ -92,4 +92,4 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 ## Relationship to babelmixr2
 
-`babelmixr2`'s Monolix backend (`est = "monolix"`) writes the model to a project, runs Monolix, and reads the outputs itself to build an nlmixr2 fit; it does not call `monolix2rx`. `babelmixr2::as.nlmixr2()` converts a `monolix2rx` model to an nlmixr2 fit. If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` directly with `monolix2rx()`: it is an independent path for reading a Monolix run into rxode2 and nlmixr2.
+`babelmixr2`'s Monolix backend (`est = "monolix"`) writes the model to a project, runs Monolix, and reads the outputs (reusing monolix2rx's project parser) to build an nlmixr2 fit; it does not re-translate the model with `monolix2rx()`. `babelmixr2::as.nlmixr2()` converts a `monolix2rx` model to an nlmixr2 fit. If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` directly with `monolix2rx()`: it is an independent path for reading a Monolix run into rxode2 and nlmixr2.

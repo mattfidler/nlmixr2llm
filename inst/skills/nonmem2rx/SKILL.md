@@ -14,7 +14,7 @@ Activate whenever the user is:
 - Converting a finished NONMEM run into rxode2/nlmixr2 for simulation or VPC.
 - Validating ("qualifying") a NONMEM model by reproducing PRED/IPRED in rxode2.
 - Pulling THETA / OMEGA / ETAs out of a NONMEM listing into R.
-- Setting up a babelmixr2 workflow whose NONMEM step needs to be read back.
+- Cross-checking a babelmixr2 NONMEM fit by importing the same run independently.
 
 ## Minimum viable example
 
@@ -106,6 +106,7 @@ The skill is "done" only when the converted model has been **executed and qualif
 | `dataset not found` | `$DATA` path is relative to the ctl directory — `setwd()` or pass an absolute path |
 | `rounding errors` in listing | NONMEM run didn't fully converge; use the `read-rounding` vignette workflow before trusting estimates |
 |  mismatch in `$ipredCompare` | unsupported NONMEM construct, or model uses an ADVAN/feature nonmem2rx doesn't translate cleanly — inspect the generated rxode2 model and reconcile by hand |
+| `parameter not found` when solving the converted model | a THETA used inside `$ERROR` didn't carry over; patch the rxode2 model |
 | Duplicate ETA / parameter names | known limitation — nonmem2rx will not auto-rename; fix in the source ctl |
 
 ## What NOT to do
@@ -125,4 +126,4 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 ## Relationship to babelmixr2
 
-`babelmixr2` (`est = "nonmem"`) reads NONMEM's output itself and combines it with the nlmixr2 model it already has; it does not call `nonmem2rx`. That makes `nonmem2rx` a useful independent second path: if a babelmixr2 NONMEM fit looks wrong, load the same run with `nonmem2rx()`, check `$ipredCompare`, and promote it with `babelmixr2::as.nlmixr2()` to compare.
+`babelmixr2` (`est = "nonmem"`) reads NONMEM's output with nonmem2rx's file readers (`nminfo()`, `nmext()`, `nmtab()`, `nmcov()`) and combines it with the nlmixr2 model it already has; it does not re-translate the model with `nonmem2rx()`. That makes a full `nonmem2rx()` import a useful second path: if a babelmixr2 NONMEM fit looks wrong, load the same run with `nonmem2rx()`, check `$ipredCompare`, and promote it with `babelmixr2::as.nlmixr2()` to compare.

@@ -144,7 +144,7 @@ The skill is "done" only when the fit has been **executed and inspected**, not j
 | `could not find NONMEM` / `could not find Monolix` | `runCommand` not set or wrong; check `getOption("babelmixr2.nonmem")` |
 | Run launches but exits with rounding errors | model didn't converge — same fix as in NONMEM directly; consider `nonmemControl(readRounding = TRUE)` to read partial results |
 | Fit object missing standard errors / `$parFixed` empty | reading the engine output back failed (e.g. no covariance step ran) — check the engine's own output files, or load the run independently with `nonmem2rx()` / `monolix2rx()` |
-| Parameter estimates differ from a hand-written ctl | check transforms — babelmixr2 generates `MU`-referenced code; manual ctls often don't |
+| Parameter estimates or OFV differ from a hand-written ctl | check transforms — babelmixr2 generates `MU`-referenced code (manual ctls often don't) — then `$THETA` bounds and dataset column ordering |
 | Monolix run "succeeds" but no fit | `lixoftConnectors` not installed *and* `babelmixr2.monolix` option unset |
 | `saemix` fails with "non-numeric argument to function" or "invalid subscript type 'list'" | `linCmt()` model, or a theta without an eta ([#212](https://github.com/nlmixr2/babelmixr2/issues/212)); rewrite as ODEs with an eta on every structural parameter |
 | `pseudoOptim` "requires all parameters to have finite lower and upper bounds" | give every `ini()` parameter bounds: `tcl <- c(-5, 1, 5)` |

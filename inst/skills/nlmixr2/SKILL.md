@@ -98,7 +98,7 @@ Always run the example (or its adapted form) and confirm the fit converges and p
    | | `"vae"` | Variational autoencoder (LSTM encoder, ELBO) with simultaneous covariate selection |
    | Empirical Bayes | `"posthoc"` | Freezes THETA/OMEGA and computes ETAs (MAP) for the given data; useful for new individuals |
 
-   *Variants.* The FOCEi-family names (`foce*`, `laplace`, `agq`) take an `m` prefix (mu-referenced closed-form regression, `muModel = "lin"`), an `i` prefix (mu-referenced IRLS, `muModel = "irls"`), and an `f` suffix (analytic fast outer gradient, `fast = TRUE`). `flaplace`/`fagq` also use the full conditional Hessian (Gaussian endpoints only). Examples: `mfocei`, `ifoceif`, `mlaplace`, `iagqf`. Start with the base method and switch to a variant for speed.
+   *Variants.* The FOCEi-family names (`foce*`, `laplace`, `agq`) take an `m` prefix (mu-referenced closed-form regression, `muModel = "lin"`), an `i` prefix (mu-referenced IRLS, `muModel = "irls"`), and an `f` suffix (analytic fast outer gradient, `fast = TRUE`). `flaplace`/`fagq` also use the full conditional Hessian (Gaussian endpoints only). Examples: `mfocei`, `ifoceif`, `mlaplace`, `iagqf`. The nonparametric methods take the same prefixes (`mnpag`, `inpag`, `mnpb`, `inpb`). Start with the base method and switch to a variant for speed.
 
    *From other packages:* babelmixr2 adds `"nlmer"` (`lme4::nlmer`), `"saemix"`, `"nonmem"`, `"monolix"`, and `"pknca"`; nlmixr2bayes adds `"nuts"` (alias `"stan"`), `"advi"`, and `"pathfinder"`, which run Stan and **require a `prior()` on every theta and residual parameter** (OMEGA blocks get a default; see *Priors* below).
 
@@ -167,7 +167,7 @@ library(nlmixr2bayes)
 fitNuts <- nlmixr2(one.cmt, theo_sd, "nuts", nutsControl(seed = 42, chains = 2, iter = 1000))
 ```
 
-- **A prior is never silently ignored.** The FOCEi family (all variants), `laplace`/`agq`, and `imp`/`impmap`/`qrpem` use them as a penalty; `nuts`/`advi`/`pathfinder` use them as the Bayesian prior; `posthoc` evaluates them. Every other method (`saem`, `nlme`, `npag`, `vae`, the pooled optimizers, NONMEM/Monolix via babelmixr2, ...) refuses a model with priors.
+- **A prior is never silently ignored.** The FOCEi family (all variants, including `fo`/`foi`), `laplace`/`agq`, and `imp`/`impmap`/`qrpem` use them as a penalty; `nuts`/`advi`/`pathfinder` use them as the Bayesian prior; `posthoc` evaluates them. Every other method (`saem`, `nlme`, `npag`, `vae`, the pooled optimizers, NONMEM/Monolix via babelmixr2, ...) refuses a model with priors.
 - The prior convention (`"general"`, NONMEM `"nwpri"`, `"tnpri"`) is auto-detected from what the model wrote; force it with `foceiControl(priorMethod = )`.
 - To simulate uncertainty from a fit that carries priors, pass `usePrior = FALSE`, e.g. `rxSolve(fitMap, ev, nStud = 100, usePrior = FALSE)`. The fitted estimates no longer match the prior means, which the prior simulation requires.
 - nlmixr2bayes refuses a model without priors and prints suggested `prior()` lines. OMEGA blocks without a prior get an announced LKJ(2) + half-Cauchy default.
@@ -220,6 +220,7 @@ Use  `| endpoint` (do NOT use `dvid("endpoint")`) to bind each error line to a r
 | SAEM runs forever / huge OFV swings | bad initial estimates, especially on the log scale; sanity-check `exp(tka)` etc. |
 | Model with priors errors on `est=` | that method cannot use priors; use a FOCEi-family, `imp`/`impmap`/`qrpem`, or nlmixr2bayes method |
 | "needs to be a mixed effect model" / "can only have population estimates" | wrong family for the model; see the pooled vs mixed-effects tables |
+| Converged, but a parameter sits at its boundary | it isn't really estimated; rethink the model (fix it, drop it, or reparameterize) |
 | FOCEi fails with Hessian errors | over-parameterized OMEGA, near-zero variance estimate, or model identifiability issue — try fewer ETAs or fix small variances, or try other outerOpt optimizations like `foceiControl(outerOpt="bobyqa")` for instance |
 | `vpcPlot` empty / wrong | residual error not specified, or endpoint names after `|` don't match the data's `DVID` values |
 | `augPred` flat | dosing into wrong compartment, or `cmt=` in data doesn't match `d/dt(name)` |
