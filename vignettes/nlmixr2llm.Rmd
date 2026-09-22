@@ -130,16 +130,21 @@ install_codex(scope = "project", path = ".",
 install_codex(scope = "user", mode = "append")
 ```
 
-Codex enforces a default 32 KiB cap on combined `AGENTS.md` content (`project_doc_max_bytes` in `~/.codex/config.toml`). The full corpus (~62 KiB) is larger than that. The combined `nlmixr2verse` agent is ~29 KiB and is always included whole when agents are requested, so `packages = ...` only subsets the skills. For Codex you'll typically want to subset:
+Codex enforces a default 32 KiB cap on combined `AGENTS.md` content (`project_doc_max_bytes` in `~/.codex/config.toml`). The full corpus (~78 KiB) is larger than that. The combined `nlmixr2verse` agent is a compact orchestration layer (~14 KiB) and is always included whole when agents are requested, so `packages = ...` only subsets the skills. The agent plus any one skill fits under the default cap (a package test enforces this):
 
 ```{r codex_subset, eval = FALSE}
-# Just the combined agent (~29 KiB, high-signal), not the long skill files
+# The agent plus the skill for the package you use most
+install_codex(scope = "project", packages = "nlmixr2")
+
+# Just the agent (~14 KiB): routing, conventions, and per-package cards
 install_codex(scope = "project", include = "agents")
 
 # Or just the skills for the packages you're actually using
 install_codex(scope = "project", include = "skills",
               packages = c("rxode2", "nlmixr2"))
 ```
+
+For the full corpus, raise the cap in `~/.codex/config.toml` (e.g. `project_doc_max_bytes = 131072`).
 
 `install_codex()` warns when the written file exceeds 32 KiB so you know to subset or raise Codex's cap.
 

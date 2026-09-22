@@ -1,6 +1,6 @@
 ---
 name: monolix2rx
-description: Use this skill when the user wants to convert a Monolix project (`.mlxtran` + results folder) into an rxode2 / nlmixr2 model object for simulation, sharing, or qualification. Triggers include calls to `monolix2rx()` or `mlxtran()`, references to `.mlxtran` files, "translate this Monolix project", or babelmixr2's Monolix back-translation step.
+description: Use this skill when the user wants to convert a Monolix project (`.mlxtran` + results folder) into an rxode2 / nlmixr2 model object for simulation, sharing, or qualification. Triggers include calls to `monolix2rx()` or `mlxtran()`, references to `.mlxtran` files, "translate this Monolix project", or cross-checking a babelmixr2 Monolix fit by importing the same run independently.
 ---
 
 # monolix2rx — Monolix → rxode2 conversion
@@ -52,22 +52,23 @@ The returned `mod` is an rxode2-flavored model — solve it with `rxSolve(mod, e
    - install `lixoftConnectors` (Monolix's R bridge) so the library can be looked up live, or
    - export the model to text in Monolix and re-point the `.mlxtran` at the text file.
 5. **Qualification first.** Like `nonmem2rx`, the translation must be checked against Monolix's own predictions before downstream use. Use the qualification helpers from the `rxode2-validate` article.
-6. **Simulating new dosing.** Build a fresh `et()` and call `rxSolve(mod, ev)`. For uncertainty propagation, pull the covariance via the parsed object.
+6. **Simulating new dosing.** Build a fresh `et()` and call `rxSolve(mod, ev)`. For parameter uncertainty just add `nStud=`: the converted model carries Monolix's covariance (`$thetaMat`) plus `dfSub`/`dfObs` in its metadata, so `rxSolve(mod, ev, nStud = 100, nSub = 50)` works directly (see the rxode2 skill for the options).
 
 ## Workflow
 
 The skill is "done" only when the converted model has been **executed and qualified**, not just loaded:
 
-1. Run `monolix2rx()` and confirm the object prints without warnings.
-2. Compare rxode2 IPRED/PRED against Monolix's own (qualification step from the `rxode2-validate` vignette workflow). Diffs should be effectively zero.
-3. *Then* run the user's actual downstream task — new-dose sim, VPC, augPred, reporting.
-4. Report qualification status alongside results.
+1. Read the `.mlxtran` first. Note custom distributions, IOV, BLQ handling, and `lib:` references, and confirm `summary.txt` and `FisherInformation/covarianceEstimatesLin.txt` exist.
+2. Run `monolix2rx()` and confirm the object prints without warnings.
+3. Compare rxode2 IPRED/PRED against Monolix's own (qualification step from the `rxode2-validate` vignette workflow). Diffs should be effectively zero.
+4. *Then* run the user's actual downstream task — new-dose sim, VPC, augPred, reporting.
+5. Report qualification status alongside results.
 
 ## Debugging quick reference
 
 | Symptom | Likely cause |
 |---|---|
-| `cannot find results folder` | `.mlxtran` was passed but the sibling results directory is missing or in a non-standard location |
+| `cannot find results folder` | `.mlxtran` was passed but the sibling results directory is missing or in a non-standard location — pass an absolute path or move the results next to the project |
 | Library reference fails (`lib:...txt` not found) | Monolix library not configured — set `options(monolix2rx.library=...)` or install `lixoftConnectors` |
 | `summary.txt` / `covarianceEstimatesLin.txt` not found | run was incomplete or covariance step skipped — re-run Monolix with the SE step enabled |
 | Parameters present but `$omega` empty | random-effects parsing hit a feature monolix2rx doesn't translate — check the model body |
@@ -82,7 +83,7 @@ The skill is "done" only when the converted model has been **executed and qualif
 - Don't treat the result from `monolix2rx()` as an nlmixr2 fit — it's an rxode2 model
 - Treat the result from `babelmixr2::as.nlmixr2()` as a nlmixr2 fit.
 
-## In-repo references
+## References (in the monolix2rx source repo, github.com/nlmixr2/monolix2rx)
 
 - `vignettes/articles/convert-nlmixr2.Rmd` — promoting to nlmixr2 fit-like
 - `vignettes/articles/rxode2-validate.Rmd` — qualification against Monolix
@@ -91,4 +92,11 @@ The skill is "done" only when the converted model has been **executed and qualif
 
 ## Relationship to babelmixr2
 
-`babelmixr2`'s Monolix saves the model to a file and reads the outputs to construct a nlmixr2 fit.  This backend uses `monolix2rx` to read Monolix results back into R after a Monolix fit. `babelmixr2` also has a function `as.nlmixr2()` to convert the rxode2 model from `monolix2rx` to a `nlmixr2` fit. If a babelmixr2 Monolix fit looks wrong, try to get around the failure by loading the same `.mlxtran` directly with `monolix2rx()` — that provides a different path to read a Monolix run into rxode2 and nlmixr2.
+`babelmixr2`'s Monolix backend (`est = "monolix"`) writes the model out, runs Monolix, and reads the results folder to build an nlmixr2 fit. It reuses `monolix2rx`'s project parser for that, but it does **not** run the full `monolix2rx()` model translation, because it already knows the original nlmixr2 model. `babelmixr2::as.nlmixr2()` is what converts a `monolix2rx()` model into an nlmixr2 fit.
+
+If a babelmixr2 Monolix fit looks wrong, load the same `.mlxtran` with `monolix2rx()`. That is a different code path into the same run, so it both works around the failure and localizes it:
+
+- **The independent conversion qualifies:** monolix2rx can represent the model and read the results, so the problem is in babelmixr2's result reading.
+- **It fails to qualify too:** that is a *translation* limitation (custom distributions, complex transforms, non-standard IOV, BLQ handling), not evidence that Monolix produced bad output. Inspect the generated rxode2 model body.
+
+Whether the Monolix run itself is sound is a separate question, answered by `summary.txt` and the convergence output rather than the qualification diff.
