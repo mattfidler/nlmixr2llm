@@ -1,44 +1,32 @@
-# Runs the fenced R code blocks shipped in inst/agents and inst/skills against
-# the current CRAN releases of the nlmixr2 ecosystem (see
-# tests/testthat/test-examples.R). Kept out of the R-CMD-check matrix because it
-# fits real models and needs the whole modeling stack installed. The weekly
-# schedule is the point: it catches upstream API drift that would otherwise
-# only surface when an LLM writes broken code from these snippets. Blocks in
-# `example_slow` are skipped here and run weekly by slow-examples.yaml.
+# Runs only the skill code blocks listed in `example_slow`
+# (tests/testthat/helper-examples.R): examples that are important to keep
+# working but too slow for skill-examples.yaml on every push / PR. Weekly, like
+# nlmixr2est's slow-tests.yaml, plus on demand.
 on:
-  push:
-    branches: [main, master]
-    paths:
-      - 'inst/agents/**'
-      - 'inst/skills/**'
-      - 'tests/testthat/helper-examples.R'
-      - 'tests/testthat/test-examples.R'
-      - '.github/workflows/skill-examples.yaml'
-  pull_request:
-    paths:
-      - 'inst/agents/**'
-      - 'inst/skills/**'
-      - 'tests/testthat/helper-examples.R'
-      - 'tests/testthat/test-examples.R'
-      - '.github/workflows/skill-examples.yaml'
   schedule:
-    - cron: '17 6 * * 1'   # Mondays 06:17 UTC
+    - cron: '47 6 * * 6'   # Saturdays 06:47 UTC
   workflow_dispatch:
 
-name: skill-examples.yaml
+name: slow-examples.yaml
+
+# Never overlap runs; let an in-progress one finish.
+concurrency:
+  group: slow-examples
+  cancel-in-progress: false
 
 permissions: read-all
 
 jobs:
-  skill-examples:
+  slow-examples:
     runs-on: ubuntu-latest
-    name: skill code examples (ubuntu, R release)
+    name: slow skill code examples (ubuntu, R release)
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
       NOT_CRAN: true
       NLMIXR2LLM_RUN_EXAMPLES: true
+      NLMIXR2LLM_SLOW_EXAMPLES: only
 
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +67,7 @@ jobs:
             any::dplyr
             any::tidyr
 
-      - name: Run the skill code examples
+      - name: Run the slow skill code examples
         run: |
           Rscript -e '
             res <- testthat::test_local(filter = "examples", reporter = "progress",

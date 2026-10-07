@@ -4,6 +4,8 @@
 
 **Quick pick — count the etas.** The structure of the between-subject variability matters more than the complexity of the structural model. `saem` does better with **many** etas; `focei` does better with **few**. Both support generalized `ll()` likelihoods. Use a pooled optimizer when there are no etas.
 
+**Neural networks override the eta count.** A model with an `nn()` term (nlmixr2nn) needs a method with gradients on the inner step: `"focei"` (or `laplace`/`agq`, `impmap`, `vae`/`emvi`/`fbvi`) with etas; the default `bobyqa` outer optimizer is fine. Without etas, use a population estimator with gradients (`"lbfgsb3c"`, `"nlminb"`, `"n1qn1"`), not a derivative-free one. SAEM, `imp` (no MAP step), `qrpem` and `npag`/`npb` train the network poorly. See `neural-networks.md`.
+
 List everything registered in the session, grouped by category:
 
 ```r

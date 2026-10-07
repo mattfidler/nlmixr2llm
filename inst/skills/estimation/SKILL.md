@@ -1,6 +1,6 @@
 ---
 name: estimation
-description: Use this skill when the user wants to fit a population PK/PD model to data in R with nlmixr2 — writing an `ini({}) / model({})` model for estimation, choosing an estimation method (SAEM, FOCEi, Laplace/AGQ, importance sampling, nonparametric, pooled optimizers, Bayesian via nlmixr2bayes), `prior()` lines, `setCov()`, tuning `saemControl()` / `foceiControl()`, building the model up (adding ETAs, covariates, residual error, OMEGA blocks), checking convergence and parameter precision, running bootstrap or likelihood-profile confidence intervals, comparing nested models, or debugging a fit that fails or gives implausible estimates. Triggers include `nlmixr2()` / `nlmixr()`, `est = "saem" | "focei" | ...`, `$parFixed`, `$omega`, `$objf`, `bootstrapFit()`, `profileLlp()`, "fit this model", "estimate the parameters", "which estimation method should I use".
+description: Use this skill when the user wants to fit a population PK/PD model to data in R with nlmixr2 — writing an `ini({}) / model({})` model for estimation, choosing an estimation method (SAEM, FOCEi, Laplace/AGQ, importance sampling, nonparametric, pooled optimizers, Bayesian via nlmixr2bayes), `prior()` lines, `setCov()`, tuning `saemControl()` / `foceiControl()`, building the model up (adding ETAs, covariates, residual error, OMEGA blocks), checking convergence and parameter precision, running bootstrap or likelihood-profile confidence intervals, comparing nested models, exploring the base structural model (number of compartments, absorption, elimination, PD link), fitting a model with an embedded neural network (nlmixr2nn `nn()`, universal differential equations / neural ODEs, learned covariate relationships), or debugging a fit that fails or gives implausible estimates. Triggers include `nlmixr2()` / `nlmixr()`, `est = "saem" | "focei" | ...`, `$parFixed`, `$omega`, `$objf`, `bootstrapFit()`, `profileLlp()`, `nn()` / `nnControl()`, "neural network", "fit this model", "estimate the parameters", "which estimation method should I use".
 ---
 
 # Estimation — population PK/PD modeling with nlmixr2
@@ -57,12 +57,13 @@ fit$parFixed
 8. **Closed-form PK** can use `linCmt()` in place of the ODEs (`linCmt() ~ add(add.sd)`), which is faster for 1–3 compartment linear models.
 9. **The model decides the family:** no etas needs a pooled method (`focei`, `nlm`, `nlminb`, `bobyqa`, ...). Full list, variants, and covariance tokens: `references/estimation-methods.md`.
 10. **Priors** in `ini({})` work with the FOCEi family, `laplace`/`agq`, `imp`/`impmap`/`qrpem`, `posthoc`, and nlmixr2bayes; other methods refuse them. See `references/priors.md`.
+11. **Neural networks → gradient-based estimation.** If the model contains `nn()` (nlmixr2nn), fit with `"focei"` (or `laplace`/`agq`, `impmap`, `vae`/`emvi`/`fbvi`); with no etas, a population estimator with gradients (`"lbfgsb3c"`, `"nlminb"`, `"n1qn1"`). Not SAEM, `imp` (no MAP step; `impmap` is fine), `qrpem`, nonparametric, or a derivative-free population estimator (`bobyqa`). The gradient that matters is on the inner step, where the weights train from exact sensitivities; FOCEi's `bobyqa` outer optimizer is fine. See `references/neural-networks.md`.
 
 ## Estimation methods
 
 | `est=` | Use for |
 |---|---|
-| `"saem"` | Best when the model has **many** etas (the BSV structure matters more than structural complexity); tolerant of poor initials. Computes SEs by default via `covMethod` in `saemControl()`; check they are present. Does not compute an objective function during the fit: `fit$objf` (Gaussian quadrature) or `addCwres(fit)` (FOCEi) adds one. |
+| `"saem"` | Best when the model has **many** etas (but not when it contains `nn()`; see rule 11) (the BSV structure matters more than structural complexity); tolerant of poor initials. Computes SEs by default via `covMethod` in `saemControl()`; check they are present. Does not compute an objective function during the fit: `fit$objf` (Gaussian quadrature) or `addCwres(fit)` (FOCEi) adds one. |
 | `"focei"` | Best when the model has **few** etas. Gradient-based with Hessian SEs; more sensitive to initials and stiffness; supports generalized `ll()` likelihoods (as does SAEM). Common pattern: SAEM first, then FOCEi from the SAEM estimates. |
 | `"foce"`, `"fo"`, `"foi"` | Variants without interaction / first-order; legacy comparison. |
 | `"laplace"`, `"agq"` | Laplace approximation (AGQ with one quadrature point) and adaptive Gaussian quadrature (`agqControl(nAGQ=)`); more accurate likelihoods, but keep `nAGQ` small and use only with few ETAs. |
@@ -75,7 +76,9 @@ fit$parFixed
 
 ## Model building
 
-Start simple, add one thing at a time, keep the OFV trail.
+Order: data exploration → **base structural model** → stochastic model (etas, OMEGA, residual error) → covariates → evaluation. When the structure is not given ("how many compartments", "which absorption model", "what model fits this data"), run the structural exploration loop in `references/structural-model.md` first. Fit several candidates under an identical stochastic model, gate and rank them (OFV/AIC plus a VPC discrepancy), write a structured diagnosis, keep a log, and fall back to a neural-network term only when no candidate fits.
+
+After that, start simple, add one thing at a time, and keep the OFV trail.
 
 ```r
 fit2 <- fit |> ini(tka = log(2)) |> nlmixr2(theo_sd, est = "saem", saemControl(print = 0))   # new initials
@@ -123,6 +126,7 @@ Acceptance checks before reporting: OFV finite; no THETA on a bound; %RSE reason
 | BSV% near 0 or > 100% | ETA unsupported by data; remove it |
 | `vpcPlot` / `augPred` empty or flat | residual line missing, `dvid` mismatch, or `CMT` in data does not map to `d/dt(name)` |
 | Fit "converges" but IPRED misses the data | dosing compartment or units wrong in the data |
+| Model with `nn()` fit by SAEM has a huge OFV or never settles | wrong method: refit with `"focei"` (rule 11) |
 
 ## What NOT to do
 
@@ -140,3 +144,5 @@ Acceptance checks before reporting: OFV finite; no THETA on a bound; %RSE reason
 - `vignettes/nimo.Rmd`, `mavoglurant.Rmd`, `wbc.Rmd` — worked PK/PD examples
 - nlmixr2extra: bootstrap, likelihood profiling, preconditioning (see `references/model-building.md`)
 - nlmixr2lib: `vignettes/list-of-models.Rmd`
+- AgentODE (Yang et al. 2026, arXiv:2607.00733): the propose–diagnose–log loop behind `references/structural-model.md`
+- nlmixr2nn: `vignettes/nlmixr2nn.Rmd`, `nlmixr2nn-node.Rmd` — neural networks in models (see `references/neural-networks.md`)

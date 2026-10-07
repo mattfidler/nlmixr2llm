@@ -2,6 +2,25 @@
 
 ## Task-oriented content
 
+* New `estimation/references/structural-model.md`: base structural model
+  exploration as the first model-building step, adapted from AgentODE
+  (Yang et al. 2026). The agent reads the data's shape, proposes candidates
+  from nlmixr2lib, fits them under an identical stochastic model, and gates
+  and ranks them by OFV/AIC/BIC plus a VPC discrepancy. It then writes a
+  structured diagnosis, keeps a `structure-log.csv` experience log, and as a
+  fallback learns an unknown term with `nn()` and distills it into a closed
+  form. `model-building.md`, the estimation skill and the agent now follow the
+  order structure → stochastic model → covariates → evaluation.
+* New `estimation/references/neural-networks.md` covers models with embedded
+  neural networks (nlmixr2nn `nn()`): universal differential equations,
+  learned covariate relationships, no-BSV models, `nnControl()` and its
+  regularizers, inspecting a network with `nnEval()`, hand-written augmented
+  neural ODEs, and pitfalls. The estimation skill and the agent now steer any
+  model containing `nn()` to a method with gradients on the inner step
+  (`focei`, `laplace`/`agq`, `impmap`, `vae`/`emvi`/`fbvi`) rather than SAEM, and
+  a model with no etas to a population estimator with gradients (`lbfgsb3c`,
+  `nlminb`, `n1qn1`) rather than a derivative-free one.
+  nlmixr2nn is added to the estimation task's packages.
 * New `design` task skill for optimal design with PopED via babelmixr2
   (`est = "poped"`): evaluating a planned study's expected precision and
   shrinkage, optimizing sampling times and doses, comparing group sizes, Ds and ED

@@ -80,7 +80,32 @@ example_skips <- c(
   "skills/design/SKILL.md#2"                     = "poped_optim() searches run for minutes",
   "skills/design/references/poped-recipes.md#2"  = "ED optimization runs for minutes",
   "skills/design/references/poped-recipes.md#3"  = "needs the adult and pediatric databases of ex.11",
-  "skills/design/references/poped-recipes.md#4"  = "needs the weight-covariate model of ex.12"
+  "skills/design/references/poped-recipes.md#4"  = "needs the weight-covariate model of ex.12",
+  "skills/estimation/references/neural-networks.md#4" = "refits the UDE of block #1 for 400 rounds"
+)
+
+# Blocks that run but are too slow for every push / PR, keyed "file#index" ->
+# reason. They are skipped unless NLMIXR2LLM_SLOW_EXAMPLES is "true" (run
+# everything) or "only" (run just these); the weekly slow-examples.yaml
+# workflow uses "only".
+example_slow <- c(
+  "skills/estimation/references/neural-networks.md#2" = "multi-eta focei fit training an nn() for 200 joint rounds"
+)
+
+# "false" (default), "true", or "only".
+slow_examples_mode <- function() {
+  mode <- tolower(Sys.getenv("NLMIXR2LLM_SLOW_EXAMPLES", "false"))
+  if (mode %in% c("true", "only")) mode else "false"
+}
+
+# Packages a single block needs beyond example_packages, keyed "file#index".
+# The block is skipped (not failed) when one is missing, so an optional add-on
+# such as nlmixr2nn (not on CRAN) does not disable the whole suite.
+example_block_packages <- list(
+  "skills/estimation/references/neural-networks.md#1" = "nlmixr2nn",
+  "skills/estimation/references/neural-networks.md#2" = "nlmixr2nn",
+  "skills/estimation/references/neural-networks.md#3" = c("nlmixr2nn", "lbfgsb3c"),
+  "skills/estimation/references/neural-networks.md#5" = "nlmixr2nn"
 )
 
 # Top-level statements that reference a placeholder path (a user's own files)
@@ -234,7 +259,10 @@ example_warning_allowlist <- c(
 # keyed "file#index". Kept separate from the global list so a genuinely broken
 # snippet elsewhere is not masked.
 example_block_warning_allowlist <- list(
-  "skills/interop/references/monolix.md#2" = "NAs introduced by coercion"  # monolix2rx parser
+  "skills/interop/references/monolix.md#2" = "NAs introduced by coercion",  # monolix2rx parser
+  # an eta passed into nn() is a network input, so it cannot be mu-referenced
+  "skills/estimation/references/neural-networks.md#1" = "non-mu referenced",
+  "skills/estimation/references/neural-networks.md#2" = "non-mu referenced"
 )
 
 # Evaluate one block in a fresh child of the fixture environment, in a working
