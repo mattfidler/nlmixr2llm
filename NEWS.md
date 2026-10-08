@@ -10,7 +10,10 @@
   structured diagnosis, keeps a `structure-log.csv` experience log, and as a
   fallback learns an unknown term with `nn()` and distills it into a closed
   form. `model-building.md`, the estimation skill and the agent now follow the
-  order structure → stochastic model → covariates → evaluation.
+  order structure → stochastic model → covariates → evaluation. For single-endpoint
+  PK within its search space, the reference starts from an automated
+  nlmixr2auto search (with nlmixr2autoinit initial estimates) and continues
+  the loop for what that search cannot express (absorption delays, PD, TMDD).
 * New `estimation/references/neural-networks.md` covers models with embedded
   neural networks (nlmixr2nn `nn()`): universal differential equations,
   learned covariate relationships, no-BSV models, `nnControl()` and its

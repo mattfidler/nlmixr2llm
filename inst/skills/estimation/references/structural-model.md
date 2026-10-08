@@ -45,6 +45,50 @@ ggplot(obs, aes(TIME, DV, group = ID)) + geom_line(alpha = 0.4) +
 
 Propose **several** candidates per round: the incumbent, one change for each hypothesis above, and at least one candidate from a different structural family, so the search does not lock onto one branch. (AgentODE gets that diversity from separate search "islands"; one candidate from outside the leading family is the single-analyst equivalent.) Build them from nlmixr2lib starting models and edit functions where possible. Write an `ini()`/`model()` function only when the library cannot express the hypothesis.
 
+### Automated search first, when the problem fits: nlmixr2auto
+
+For single-endpoint PK with IV bolus or first-order oral dosing, run **nlmixr2auto** (Huang et al., UCL Pharmacometrics) before hand-proposing anything. It searches 1–3 compartments and linear vs. Michaelis–Menten elimination automatically:
+- stepwise with `sf.operator()`;
+- genetic algorithm with `ga.operator()`;
+- ant colony with `aco.operator()`;
+- tabu search with `tabu.operator()`.
+
+Its companion **nlmixr2autoinit** derives initial estimates from the data, using naive-pooled NCA, graphical methods and parameter sweeps.
+
+Initial estimates for hand-built candidates come from `getPPKinits()` (about 30 s on `theo_sd`):
+
+```r
+library(nlmixr2)
+library(nlmixr2autoinit)
+inits <- getPPKinits(data, verbose = FALSE)
+est   <- inits$Recommended_initial_estimates           # Ka, CL, Vd, Vmax/Km, 2-/3-cmt volumes and Q, sigmas
+v     <- setNames(as.numeric(est$Values), est$Parameters)   # Values is formatted text
+cand  <- nlmixr2lib::readModelDb("PK_1cmt_des") |>
+  ini(lka = log(v[["Ka"]]), lcl = log(v[["CL"]]), lvc = log(v[["Vd"]]))
+```
+
+The stepwise structural search limits itself to compartments and elimination with `steps = 12`. Steps 3–7 select IIV, correlations and residual error, which belong to the next model-building stage:
+
+```r
+library(nlmixr2auto)
+auto <- sf.operator(dat = data, search.space = "oralbase", steps = 12,
+                    foldername = "auto_sf", filename = "auto_sf",
+                    saem.control = saemControl(seed = 1234, nBurn = 200, nEm = 300,
+                                               logLik = TRUE, print = 0))
+auto                                   # best model name and the stepwise history
+auto[["Model Run History"]][, c("model.num", "AIC", "BIC", "OBJFV", "npar")]
+```
+
+On `theo_sd` this takes about 1.5 minutes and selects `oral_1cmpt_FO_abs_..._FOelim`, the 1-compartment linear model.
+
+How to use the result:
+
+- **Treat it as the incumbent, not the answer.** Its oral search space has first-order absorption only: no lag, transit, zero-order or dual absorption, no PD, no TMDD. On `theo_sd` the lag and transit structures in section 3 fit far better than anything it can propose. Continue the loop from its winner for everything outside its space.
+- **Its OFVs are not comparable with the loop's.** It fits with SAEM and the eta structure of each step, so refit its winner under section 3's fixed stochastic model before ranking it against the other candidates.
+- **Read its `fitness` column with care.** Fitness is BIC plus penalties from `penaltyControl()`: 10000 per parameter outside its bounds or per failed covariance step, and a two-level 10 / 10000 penalty for moderate / critical RSE, shrinkage, BSV and sigma deviations. A fitness in the tens of thousands means constraints were hit, not that the fit is bad.
+- **Zero concentrations are dropped for initial estimates only.** `getPPKinits()`, and so the operators' automatic initial-estimate step, converts `DV = 0` observations to `EVID = 2` (excluded) and says so in a note. The operators' SAEM fits use the data as given. Decide how BLQ or zero records are handled (a `CENS` column) before running either.
+- **Log its runs.** Add the run history (`auto[["Model Run History"]]`, also written to `<foldername>/<filename>.csv`) to `structure-log.csv` so the loop does not re-propose what it already tried. Its model files are left in `foldername` and can be read back for refitting.
+
 ## 3. Fit them identically, score, and log
 
 A structural comparison is only fair when **everything except the structure is held fixed**:
@@ -99,13 +143,13 @@ scoreStructure <- function(fit, name, change = "") {
   p    <- fit$parFixedDf
   free <- fit$iniDf[!fit$iniDf$fix, ]
   dz   <- vpcDiscrepancy(fit)
-  w    <- dz[which.max(dz$z), ]                     # which.max() skips NA
+  w    <- if (all(is.na(dz$z))) NULL else dz[which.max(dz$z), ]   # which.max() skips NA
   data.frame(model = name, change = change, nPar = nrow(free),
              OFV = fit$objf, AIC = AIC(fit), BIC = BIC(fit),
              covOk = !anyNA(p$SE), maxRSE = if (all(is.na(p$SE))) NA_real_ else round(max(p$`%RSE`, na.rm = TRUE)),
              onBound = any(abs(free$est - free$lower) < 1e-4 | abs(free$est - free$upper) < 1e-4),
              vpcScore = round(mean(dz$z, na.rm = TRUE), 3),
-             worst = sprintf("%s q%.0f", w$bin, 100 * w$prob))
+             worst = if (is.null(w)) NA_character_ else sprintf("%s q%.0f", w$bin, 100 * w$prob))
 }
 
 changes <- c(oneCmt = "base", oneCmtLag = "+ lag on depot",
@@ -166,7 +210,7 @@ plot(augPred(fit))
 
 - **One structural change per candidate**, so each ΔOFV has a single cause.
 - **Read the log before proposing.** Do not re-propose a change that already failed. Re-propose top-ranked structures with a further change, but always include one candidate from outside the leading family.
-- **Budget**, borrowed from AgentODE's per-structure inner loop (its structure search is an open-ended evolutionary run): stop after 10 rounds, 20 while the best AIC is still improving, or after 5 consecutive rounds without improving the best gated candidate.
+- **Budget**, borrowed from AgentODE's per-structure inner loop (its outer structure search is a budgeted evolutionary run of ~500 sampled structures): stop after 10 rounds, 20 while the best AIC is still improving, or after 5 consecutive rounds without improving the best gated candidate.
 - **Hand off** the best gated structure to step 3, together with the log (`structure-log.csv`) as the record of what was tried and why it was rejected.
 
 ## 6. When no candidate fits: learn the term, then name it
@@ -224,4 +268,4 @@ Here Michaelis–Menten reaches OFV ≈ −175 and recovers the simulated Vmax �
 
 ## Scope
 
-This procedure needs individual-level data. AgentODE itself never sees individual trajectories: it infers structure and parameter distributions from population summary statistics alone, with a synthetic likelihood. That setting (for example, published means and CIs only) is not available in nlmixr2 yet.
+This procedure needs individual-level data. AgentODE's LLM never sees individual trajectories: its structure search and parameter inference work from precomputed population summary statistics (some computed per trajectory, then summarized), with a synthetic likelihood. That setting (for example, published means and CIs only) is not available in nlmixr2 yet.

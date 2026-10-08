@@ -71,6 +71,8 @@ jobs:
             any::xpose
             any::ggPMX
             any::lbfgsb3c
+            any::nlmixr2autoinit
+            any::nlmixr2auto
             github::nlmixr2/nlmixr2nn
             any::nonmem2rx
             any::monolix2rx

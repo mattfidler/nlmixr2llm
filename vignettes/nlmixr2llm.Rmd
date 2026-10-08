@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 | Task | Covers | Packages |
 |---|---|---|
 | `simulation` | ODE model authoring, event tables, population and trial simulation | rxode2, nlmixr2lib |
-| `estimation` | Fitting population PK/PD models, model building, precision, neural networks in models | nlmixr2, nlmixr2extra, nlmixr2lib, nlmixr2nn |
+| `estimation` | Fitting population PK/PD models, model building, precision, neural networks in models | nlmixr2, nlmixr2extra, nlmixr2lib, nlmixr2nn, nlmixr2auto |
 | `reporting` | GOF diagnostics, VPCs, parameter tables, Word / PowerPoint reports | nlmixr2plot, xpose.nlmixr2, ggPMX, nlmixr2rpt, shinyMixR |
 | `interop` | Running models in NONMEM / Monolix / PKNCA; importing and qualifying finished runs | babelmixr2, nonmem2rx, monolix2rx |
 | `design` | Optimal design: evaluating and optimizing a planned study | babelmixr2, PopED |

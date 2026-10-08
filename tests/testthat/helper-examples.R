@@ -89,7 +89,8 @@ example_skips <- c(
 # everything) or "only" (run just these); the weekly slow-examples.yaml
 # workflow uses "only".
 example_slow <- c(
-  "skills/estimation/references/neural-networks.md#2" = "multi-eta focei fit training an nn() for 200 joint rounds"
+  "skills/estimation/references/neural-networks.md#2" = "multi-eta focei fit training an nn() for 200 joint rounds",
+  "skills/estimation/references/structural-model.md#3" = "nlmixr2auto stepwise search fits several SAEM models"
 )
 
 # "false" (default), "true", or "only".
@@ -105,7 +106,9 @@ example_block_packages <- list(
   "skills/estimation/references/neural-networks.md#1" = "nlmixr2nn",
   "skills/estimation/references/neural-networks.md#2" = "nlmixr2nn",
   "skills/estimation/references/neural-networks.md#3" = c("nlmixr2nn", "lbfgsb3c"),
-  "skills/estimation/references/neural-networks.md#5" = "nlmixr2nn"
+  "skills/estimation/references/neural-networks.md#5" = "nlmixr2nn",
+  "skills/estimation/references/structural-model.md#2" = "nlmixr2autoinit",
+  "skills/estimation/references/structural-model.md#3" = c("nlmixr2autoinit", "nlmixr2auto")
 )
 
 # Top-level statements that reference a placeholder path (a user's own files)

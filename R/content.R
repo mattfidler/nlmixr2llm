@@ -191,7 +191,7 @@ task_packages_table <- function() {
   list(
     simulation = c("rxode2", "nlmixr2lib"),
     estimation = c("nlmixr2", "nlmixr2est", "nlmixr2extra", "nlmixr2lib",
-                   "nlmixr2nn"),
+                   "nlmixr2nn", "nlmixr2auto", "nlmixr2autoinit"),
     reporting  = c("nlmixr2plot", "xpose.nlmixr2", "ggPMX", "nlmixr2rpt",
                    "shinyMixR"),
     interop    = c("babelmixr2", "nonmem2rx", "monolix2rx"),
