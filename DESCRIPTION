@@ -24,10 +24,14 @@ Imports:
     tools,
     utils
 Suggests:
+    callr,
+    ellmer,
     knitr,
     pkgdown,
     rmarkdown,
     testthat (>= 3.0.0),
+    tibble,
+    vitals,
     withr
 VignetteBuilder: knitr
 Config/testthat/edition: 3

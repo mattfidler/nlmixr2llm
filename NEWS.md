@@ -2,6 +2,14 @@
 
 ## Task-oriented content
 
+* New `evals/` (source checkout only): a vitals evaluation of the agent and
+  skill content. The same model answers each question without and with
+  `system_prompt(references = TRUE)`. A grader model scores the answers
+  against documented targets, and answers that must be code are executed, so
+  the difference between the two conditions measures the skills' effect.
+  Solver and grader are configurable by environment variable, so any
+  provider ellmer supports can be used (for example, grading Claude answers
+  with Gemini). vitals, ellmer, callr and tibble are added to Suggests.
 * New `estimation/references/structural-model.md`: base structural model
   exploration as the first model-building step, adapted from AgentODE
   (Yang et al. 2026). The agent reads the data's shape, proposes candidates
