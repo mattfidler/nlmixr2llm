@@ -10,6 +10,13 @@
   Solver and grader are configurable by environment variable, so any
   provider ellmer supports can be used (for example, grading Claude answers
   with Gemini). vitals, ellmer, callr and tibble are added to Suggests.
+* New `evals/stress.R`: a 17-question stress kit built from the nlmixr2-ecosystem
+  findings and translation traps of the nlme-benchmark project (reserved
+  `SS`/`II` columns, `sigdig = 3` ODE tolerances, the bare-`rxControl()`
+  tolerance reset, `combined1` vs `combined2`, pinned objectives, conditional
+  `etaSE`, scoring bias against the realised draw, and more). Three samples
+  carry hidden checks that fail answers which run but are wrong. Select it
+  with `NLMIXR2LLM_EVAL_SET=stress` (or `all`).
 * New `estimation/references/structural-model.md`: base structural model
   exploration as the first model-building step, adapted from AgentODE
   (Yang et al. 2026). The agent reads the data's shape, proposes candidates

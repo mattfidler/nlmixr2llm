@@ -31,3 +31,20 @@ test_that("answer code is extracted from every fence style", {
   expect_identical(as.character(env$downgrade(factor(c("C", "P", "I"), lv, ordered = TRUE))),
                    c("P", "I", "I"))
 })
+
+test_that("the stress kit is well formed and combines with the core set", {
+  skip_if_not(dir.exists(evals_dir()), "evals/ is only in a source checkout")
+  skip_if_not_installed("tibble")
+  env <- new.env()
+  sys.source(file.path(evals_dir(), "stress.R"), envir = env)
+  st <- env$nlmixr2_stress_dataset()
+  expect_true(all(c("id", "skill", "source", "runs", "input", "target", "check") %in% names(st)))
+  expect_true(all(st$skill %in% list_tasks()))
+  expect_true(all(grepl("^(F|T)[0-9]{3}", st$source)), info = "every sample cites a benchmark finding or trap")
+  # a hidden check only makes sense for executed answers, and must parse
+  expect_true(all(is.na(st$check[!st$runs])))
+  for (chk in st$check[st$runs]) expect_no_error(parse(text = chk))
+  sys.source(file.path(evals_dir(), "dataset.R"), envir = env)
+  ids <- c(env$nlmixr2_eval_dataset()$id, st$id)
+  expect_false(anyDuplicated(ids) > 0)
+})
